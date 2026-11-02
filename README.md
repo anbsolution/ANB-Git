@@ -72,3 +72,16 @@ A successful CI build is not proof of device-level correctness. Install and test
 - All operations are local and do not require network access.
 
 Phase 3 does not yet include branch creation/switching, merge, diff UI, or conflict resolution.
+
+
+## Phase 4 additions
+
+- Native offline text/code editor using Jetpack Compose.
+- Select a local repository and browse root-level files.
+- Create new files, open files, edit text, and save locally.
+- Monospace editing surface and unsaved-change indicator.
+- File names are restricted to the repository root in this phase.
+- No network access or cloud service is required.
+
+Limitations: syntax highlighting, multi-file tabs, nested folders, diff viewer,
+and advanced editor tooling are planned for later phases.

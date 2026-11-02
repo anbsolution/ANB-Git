@@ -1,5 +1,17 @@
 package com.anb.git.ui
 
+import androidx.compose.ui.text.font.FontFamily
+import androidx.compose.ui.text.TextStyle
+import androidx.compose.runtime.mutableStateListOf
+import androidx.compose.material3.DropdownMenuItem
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material.icons.filled.CreateNewFolder
+import androidx.compose.material.icons.filled.InsertDriveFile
+import androidx.compose.material.icons.filled.Save
+import androidx.compose.foundation.rememberScrollState
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.text.BasicTextField
+
 import com.anb.git.data.LocalRepository
 import com.anb.git.data.LocalRepositoryStorage
 import com.anb.git.data.RepositoryDatabase
@@ -112,7 +124,7 @@ fun AnbGitApp() {
                     onOpenEditor = { selectedTab = 2 }
                 )
                 AppTab.Repositories -> RepositoriesScreen()
-                AppTab.Editor -> EditorPlaceholderScreen()
+                AppTab.Editor -> CodeEditorScreen()
                 AppTab.Settings -> SettingsScreen()
             }
         }
@@ -458,19 +470,223 @@ private fun GitRepositoryScreen(
 }
 
 @Composable
-private fun EditorPlaceholderScreen() {
+private fun CodeEditorScreen() {
+    val context = LocalContext.current
+    val database = remember { RepositoryDatabase(context.applicationContext) }
+    val repositories = remember { mutableStateListOf<LocalRepository>() }
+    var selectedRepository by remember { mutableStateOf<LocalRepository?>(null) }
+    var repositoryMenu by remember { mutableStateOf(false) }
+    var files by remember { mutableStateOf(emptyList<java.io.File>()) }
+    var selectedFile by remember { mutableStateOf<java.io.File?>(null) }
+    var editorText by remember { mutableStateOf("") }
+    var fileName by remember { mutableStateOf("") }
+    var showNewFile by remember { mutableStateOf(false) }
+    var message by remember { mutableStateOf<String?>(null) }
+    var error by remember { mutableStateOf<String?>(null) }
+    var dirty by remember { mutableStateOf(false) }
+
+    fun refreshFiles() {
+        val repo = selectedRepository ?: return
+        val root = java.io.File(LocalRepositoryStorage.root(context), repo.folderName).canonicalFile
+        if (!root.isDirectory) {
+            files = emptyList()
+            return
+        }
+        files = root.listFiles()
+            ?.filter { it.isFile && it.name != ".DS_Store" }
+            ?.sortedBy { it.name.lowercase() }
+            ?: emptyList()
+        val active = selectedFile
+        if (active != null && !active.exists()) {
+            selectedFile = null
+            editorText = ""
+            dirty = false
+        }
+    }
+
+    LaunchedEffect(Unit) {
+        repositories.clear()
+        repositories.addAll(database.getAll())
+        if (selectedRepository == null) selectedRepository = repositories.firstOrNull()
+    }
+    LaunchedEffect(selectedRepository?.id) {
+        selectedFile = null
+        editorText = ""
+        dirty = false
+        refreshFiles()
+    }
+
+    val repo = selectedRepository
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        Modifier.fillMaxSize().padding(16.dp),
+        verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Icon(Icons.Default.Code, contentDescription = null, modifier = Modifier.size(58.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(14.dp))
-        Text("Code Editor", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(
-            "The offline code editor will be added in Phase 4.",
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        Text("Code Editor", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        if (repositories.isEmpty()) {
+            Card(Modifier.fillMaxWidth()) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("No repository available", fontWeight = FontWeight.Bold)
+                    Text("Create a local repository first from the Repositories tab.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+            }
+        } else {
+            Box {
+                OutlinedButton(onClick = { repositoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                    Text(repo?.name ?: "Select repository")
+                }
+                DropdownMenu(expanded = repositoryMenu, onDismissRequest = { repositoryMenu = false }) {
+                    repositories.forEach { item ->
+                        DropdownMenuItem(
+                            text = { Text(item.name) },
+                            onClick = { selectedRepository = item; repositoryMenu = false }
+                        )
+                    }
+                }
+            }
+            if (repo != null) {
+                Row(
+                    Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Text("Files (${files.size})", fontWeight = FontWeight.SemiBold)
+                    Button(onClick = { fileName = ""; error = null; showNewFile = true }) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.size(5.dp))
+                        Text("New file")
+                    }
+                }
+                if (selectedFile == null) {
+                    if (files.isEmpty()) {
+                        Card(Modifier.fillMaxWidth()) {
+                            Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                                Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                Text("No files yet")
+                                Text("Create a file to begin editing.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                            }
+                        }
+                    } else {
+                        LazyColumn(
+                            modifier = Modifier.weight(1f),
+                            verticalArrangement = Arrangement.spacedBy(7.dp)
+                        ) {
+                            items(files.size) { index ->
+                                val file = files[index]
+                                Card(Modifier.fillMaxWidth().clickable {
+                                    try {
+                                        selectedFile = file
+                                        editorText = file.readText()
+                                        dirty = false
+                                        error = null
+                                        message = null
+                                    } catch (e: Exception) {
+                                        error = e.message ?: "Could not open file."
+                                    }
+                                }) {
+                                    Row(Modifier.fillMaxWidth().padding(13.dp), verticalAlignment = Alignment.CenterVertically) {
+                                        Icon(Icons.Default.InsertDriveFile, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                        Text(file.name, Modifier.padding(start = 10.dp), fontWeight = FontWeight.Medium)
+                                    }
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        TextButton(onClick = {
+                            if (dirty) {
+                                error = "Save or discard your changes before leaving this file."
+                            } else {
+                                selectedFile = null
+                                editorText = ""
+                                error = null
+                                refreshFiles()
+                            }
+                        }) { Text("‹ Files") }
+                        Text(selectedFile?.name ?: "", fontWeight = FontWeight.SemiBold, modifier = Modifier.weight(1f))
+                        Button(onClick = {
+                            try {
+                                val file = selectedFile ?: throw IllegalStateException("No file selected.")
+                                file.writeText(editorText)
+                                dirty = false
+                                message = "File saved locally."
+                                error = null
+                                refreshFiles()
+                            } catch (e: Exception) {
+                                error = e.message ?: "Could not save file."
+                            }
+                        }) {
+                            Icon(Icons.Default.Save, contentDescription = null)
+                            Spacer(Modifier.size(5.dp))
+                            Text("Save")
+                        }
+                    }
+                    Card(Modifier.weight(1f).fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
+                        Column(Modifier.fillMaxSize().padding(10.dp)) {
+                            Text(
+                                "LOCAL FILE • ${if (dirty) "UNSAVED CHANGES" else "SAVED"}",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                            OutlinedTextField(
+                                value = editorText,
+                                onValueChange = { editorText = it; dirty = true; message = null },
+                                modifier = Modifier.fillMaxSize().padding(top = 8.dp),
+                                textStyle = TextStyle(fontFamily = FontFamily.Monospace),
+                                placeholder = { Text("Write your code here…") }
+                            )
+                        }
+                    }
+                }
+            }
+        }
+        message?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
+        error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+    }
+
+    if (showNewFile && repo != null) {
+        AlertDialog(
+            onDismissRequest = { showNewFile = false },
+            title = { Text("Create new file") },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = fileName,
+                        onValueChange = { fileName = it; error = null },
+                        label = { Text("File name (e.g. main.kt)") },
+                        singleLine = true
+                    )
+                    Text("Files are stored inside this repository's private app folder.", style = MaterialTheme.typography.bodySmall)
+                    error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        val clean = fileName.trim()
+                        require(clean.isNotEmpty() && clean.length <= 100) { "Enter a file name up to 100 characters." }
+                        require(clean != "." && clean != ".." && clean.none { it == '/' || it == '\\' || it.isISOControl() }) {
+                            "Only a file name is allowed. Folder paths are not supported yet."
+                        }
+                        val root = java.io.File(LocalRepositoryStorage.root(context), repo.folderName).canonicalFile
+                        val target = java.io.File(root, clean).canonicalFile
+                        require(target.parentFile == root) { "Invalid file path." }
+                        check(!target.exists()) { "A file with this name already exists." }
+                        check(target.createNewFile()) { "Could not create file." }
+                        showNewFile = false
+                        fileName = ""
+                        refreshFiles()
+                        selectedFile = target
+                        editorText = ""
+                        dirty = false
+                        message = "File created. Start editing."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not create file."
+                    }
+                }) { Text("Create") }
+            },
+            dismissButton = { TextButton(onClick = { showNewFile = false }) { Text("Cancel") } }
         )
     }
 }
