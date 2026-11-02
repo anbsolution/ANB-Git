@@ -4,6 +4,9 @@ import android.content.Context
 import java.io.File
 
 object LocalRepositoryStorage {
+    // Backward-compatible initializer called by MainActivity.
+    fun initialize(context: Context): File = root(context)
+
     fun root(context: Context): File {
         val directory = File(context.filesDir, "repositories")
         if (!directory.exists() && !directory.mkdirs()) {
