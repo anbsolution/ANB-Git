@@ -59,3 +59,16 @@ A successful CI build is not proof of device-level correctness. Install and test
 - Create, list, rename and delete private repository folders.
 - No storage permission or network access required.
 - Git initialization, commits and branches are reserved for Phase 3.
+
+
+## Phase 3 additions
+
+- JGit local Git engine.
+- Initialize Git in a selected local repository.
+- Show current branch and working-tree status.
+- Stage new, modified and removed files.
+- Create commits with a local default author identity.
+- Display recent commit history.
+- All operations are local and do not require network access.
+
+Phase 3 does not yet include branch creation/switching, merge, diff UI, or conflict resolution.
