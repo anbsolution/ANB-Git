@@ -85,3 +85,45 @@ Phase 3 does not yet include branch creation/switching, merge, diff UI, or confl
 
 Limitations: syntax highlighting, multi-file tabs, nested folders, diff viewer,
 and advanced editor tooling are planned for later phases.
+
+
+## Persistent APK update signing (important)
+
+The release build now uses a persistent keystore supplied through GitHub Actions
+repository secrets. Keep the keystore file and its passwords backed up securely.
+Never commit the keystore or passwords to Git.
+
+Required repository secrets:
+- `ANB_KEYSTORE_BASE64`: Base64-encoded contents of the `.jks` file
+- `ANB_KEYSTORE_PASSWORD`: keystore password
+- `ANB_KEY_ALIAS`: key alias
+- `ANB_KEY_PASSWORD`: key password
+
+Create the key once on a trusted machine (Termux with a JDK is acceptable):
+```sh
+keytool -genkeypair -v -keystore "$HOME/anb-git-release.jks" \
+  -alias anb-git -keyalg RSA -keysize 2048 -validity 10000
+```
+Use the alias `anb-git`. Then encode the keystore for the GitHub secret:
+```sh
+base64 "$HOME/anb-git-release.jks" | tr -d '\n'
+```
+Copy that single output into the GitHub repository secret `ANB_KEYSTORE_BASE64`.
+Set the three remaining secrets to the exact values used when creating the key.
+The key is a permanent asset: losing it prevents future in-place APK updates.
+
+The release workflow deliberately fails if signing secrets are missing. Pull
+requests run unit tests but do not receive a signed release APK.
+
+Version code is now 5, which is greater than the earlier Phase 4 build's
+version code 1. The application ID remains `com.anb.git`.
+
+## Migration warning for the already-installed pre-signing APK
+
+Earlier CI workflows produced debug APKs without preserving the runner's
+debug signing key. A new persistent release key cannot sign an update over an
+APK signed by a different key. Do not uninstall the current app until its
+repository data has been exported and verified. The project must add and test
+an in-app export/restore path before any one-time signature migration is
+attempted. If the original signing certificate/private key is recovered and
+matches, this migration is not needed.

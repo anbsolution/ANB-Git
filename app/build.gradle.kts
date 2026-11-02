@@ -12,13 +12,28 @@ android {
         applicationId = "com.anb.git"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "1.0.0-phase4"
+        versionCode = 5
+        versionName = "1.0.0-phase4-update1"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
+    }
+
+    signingConfigs {
+        create("release") {
+            val keystorePath = System.getenv("ANB_KEYSTORE_PATH")
+                ?: error("ANB_KEYSTORE_PATH is required for a signed release build.")
+            storeFile = file(keystorePath)
+            storePassword = System.getenv("ANB_KEYSTORE_PASSWORD")
+                ?: error("ANB_KEYSTORE_PASSWORD secret is missing.")
+            keyAlias = System.getenv("ANB_KEY_ALIAS")
+                ?: error("ANB_KEY_ALIAS secret is missing.")
+            keyPassword = System.getenv("ANB_KEY_PASSWORD")
+                ?: error("ANB_KEY_PASSWORD secret is missing.")
+        }
     }
 
     buildTypes {
         release {
+            signingConfig = signingConfigs.getByName("release")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),

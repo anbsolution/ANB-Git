@@ -31,13 +31,30 @@ jobs:
       - name: Run unit tests
         run: gradle testDebugUnitTest
 
-      - name: Build debug APK
-        run: gradle assembleDebug
+      - name: Restore persistent signing key
+        if: github.event_name != 'pull_request'
+        env:
+          ANB_KEYSTORE_BASE64: ${{ secrets.ANB_KEYSTORE_BASE64 }}
+        run: |
+          test -n "$ANB_KEYSTORE_BASE64" || { echo "Missing ANB_KEYSTORE_BASE64 repository secret"; exit 1; }
+          mkdir -p "$RUNNER_TEMP/anb-signing"
+          echo "$ANB_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
+          test -s "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
 
-      - name: Upload debug APK
+      - name: Build signed release APK
+        if: github.event_name != 'pull_request'
+        env:
+          ANB_KEYSTORE_PATH: ${{ runner.temp }}/anb-signing/anb-git-release.jks
+          ANB_KEYSTORE_PASSWORD: ${{ secrets.ANB_KEYSTORE_PASSWORD }}
+          ANB_KEY_ALIAS: ${{ secrets.ANB_KEY_ALIAS }}
+          ANB_KEY_PASSWORD: ${{ secrets.ANB_KEY_PASSWORD }}
+        run: gradle assembleRelease
+
+      - name: Upload signed release APK
+        if: github.event_name != 'pull_request'
         uses: actions/upload-artifact@v4
         with:
-          name: anb-git-phase1-debug-apk
-          path: app/build/outputs/apk/debug/app-debug.apk
+          name: anb-git-release-v1.0.0-phase4-update1
+          path: app/build/outputs/apk/release/app-release.apk
           if-no-files-found: error
-          retention-days: 14
+          retention-days: 30
