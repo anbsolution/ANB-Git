@@ -51,3 +51,11 @@ The exact path is Android-managed and may vary by device. App-private data is re
 ## Important
 
 A successful CI build is not proof of device-level correctness. Install and test the APK on a real Android device before marking Phase 1 complete.
+
+
+## Phase 2 additions
+
+- SQLite repository catalog.
+- Create, list, rename and delete private repository folders.
+- No storage permission or network access required.
+- Git initialization, commits and branches are reserved for Phase 3.

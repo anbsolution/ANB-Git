@@ -1,5 +1,16 @@
 package com.anb.git.ui
 
+import com.anb.git.data.LocalRepository
+import com.anb.git.data.LocalRepositoryStorage
+import com.anb.git.data.RepositoryDatabase
+import androidx.compose.ui.platform.LocalContext
+import androidx.compose.runtime.LaunchedEffect
+import androidx.compose.material3.TextButton
+import androidx.compose.material3.OutlinedTextField
+import androidx.compose.material3.AlertDialog
+import androidx.compose.material.icons.filled.Edit
+import androidx.compose.material.icons.filled.Delete
+import androidx.compose.material.icons.filled.Add
 import androidx.compose.foundation.background
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
@@ -201,18 +212,249 @@ private fun StatCard(title: String, value: String, modifier: Modifier = Modifier
 
 @Composable
 private fun RepositoriesScreen() {
+    val context = LocalContext.current
+    val database = remember { RepositoryDatabase(context.applicationContext) }
+    val repositories = remember {
+        androidx.compose.runtime.mutableStateListOf<LocalRepository>()
+    }
+    var showCreate by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var editing by remember { androidx.compose.runtime.mutableStateOf<LocalRepository?>(null) }
+    var deleting by remember { androidx.compose.runtime.mutableStateOf<LocalRepository?>(null) }
+    var name by remember { androidx.compose.runtime.mutableStateOf("") }
+    var error by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+
+    fun refreshRepositories() {
+        repositories.clear()
+        repositories.addAll(database.getAll())
+    }
+
+    LaunchedEffect(Unit) {
+        refreshRepositories()
+    }
+
     Column(
-        modifier = Modifier.fillMaxSize().padding(24.dp),
-        verticalArrangement = Arrangement.Center,
-        horizontalAlignment = Alignment.CenterHorizontally
+        modifier = Modifier.fillMaxSize().padding(20.dp),
+        verticalArrangement = Arrangement.spacedBy(14.dp)
     ) {
-        Icon(Icons.Default.Folder, contentDescription = null, modifier = Modifier.size(58.dp), tint = MaterialTheme.colorScheme.primary)
-        Spacer(Modifier.height(14.dp))
-        Text("No repositories yet", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        Text(
-            "Repository creation will be enabled in Phase 2. Your private storage is already initialized.",
-            modifier = Modifier.padding(top = 8.dp),
-            color = MaterialTheme.colorScheme.onSurfaceVariant
+        Row(
+            modifier = Modifier.fillMaxWidth(),
+            verticalAlignment = Alignment.CenterVertically,
+            horizontalArrangement = Arrangement.SpaceBetween
+        ) {
+            Column {
+                Text(
+                    "Repositories",
+                    style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold
+                )
+                Text(
+                    "${repositories.size} local repositories",
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+            Button(onClick = {
+                name = ""
+                error = null
+                showCreate = true
+            }) {
+                Icon(Icons.Default.Add, contentDescription = null)
+                Spacer(Modifier.size(5.dp))
+                Text("New")
+            }
+        }
+
+        if (repositories.isEmpty()) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp)
+            ) {
+                Column(
+                    modifier = Modifier.fillMaxWidth().padding(24.dp),
+                    horizontalAlignment = Alignment.CenterHorizontally,
+                    verticalArrangement = Arrangement.spacedBy(10.dp)
+                ) {
+                    Icon(
+                        Icons.Default.Folder,
+                        contentDescription = null,
+                        modifier = Modifier.size(48.dp),
+                        tint = MaterialTheme.colorScheme.primary
+                    )
+                    Text(
+                        "No repositories yet",
+                        fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleLarge
+                    )
+                    Text(
+                        "Create your first local project. It will be stored in ANB Git private storage.",
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    Button(onClick = {
+                        name = ""
+                        error = null
+                        showCreate = true
+                    }) {
+                        Text("Create repository")
+                    }
+                }
+            }
+        } else {
+            LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                items(repositories.size) { index ->
+                    val repository = repositories[index]
+                    Card(
+                        modifier = Modifier.fillMaxWidth(),
+                        shape = RoundedCornerShape(16.dp)
+                    ) {
+                        Row(
+                            modifier = Modifier.fillMaxWidth().padding(12.dp),
+                            verticalAlignment = Alignment.CenterVertically
+                        ) {
+                            Icon(
+                                Icons.Default.Folder,
+                                contentDescription = null,
+                                tint = MaterialTheme.colorScheme.primary
+                            )
+                            Column(
+                                modifier = Modifier.weight(1f).padding(start = 10.dp)
+                            ) {
+                                Text(repository.name, fontWeight = FontWeight.SemiBold)
+                                Text(
+                                    "Local • ${repository.folderName}",
+                                    style = MaterialTheme.typography.bodySmall,
+                                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                                )
+                            }
+                            androidx.compose.material3.IconButton(onClick = {
+                                editing = repository
+                                name = repository.name
+                                error = null
+                            }) {
+                                Icon(Icons.Default.Edit, contentDescription = "Rename")
+                            }
+                            androidx.compose.material3.IconButton(onClick = {
+                                deleting = repository
+                            }) {
+                                Icon(
+                                    Icons.Default.Delete,
+                                    contentDescription = "Delete",
+                                    tint = MaterialTheme.colorScheme.error
+                                )
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    if (showCreate || editing != null) {
+        val current = editing
+        AlertDialog(
+            onDismissRequest = {
+                showCreate = false
+                editing = null
+                error = null
+            },
+            title = {
+                Text(if (current == null) "Create repository" else "Rename repository")
+            },
+            text = {
+                Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    OutlinedTextField(
+                        value = name,
+                        onValueChange = {
+                            name = it
+                            error = null
+                        },
+                        label = { Text("Repository name") },
+                        singleLine = true
+                    )
+                    Text(
+                        "1–50 characters. Slash and backslash are not allowed.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                    error?.let {
+                        Text(it, color = MaterialTheme.colorScheme.error)
+                    }
+                }
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        if (current == null) {
+                            val folder = LocalRepositoryStorage.create(context, name)
+                            try {
+                                database.insert(
+                                    name.trim(),
+                                    folder,
+                                    System.currentTimeMillis()
+                                )
+                            } catch (exception: Exception) {
+                                LocalRepositoryStorage.delete(context, folder)
+                                throw exception
+                            }
+                        } else {
+                            val newFolder = LocalRepositoryStorage.rename(
+                                context,
+                                current.folderName,
+                                name
+                            )
+                            database.rename(current.id, name.trim(), newFolder)
+                        }
+                        refreshRepositories()
+                        showCreate = false
+                        editing = null
+                        error = null
+                    } catch (exception: Exception) {
+                        error = exception.message ?: "Operation failed."
+                    }
+                }) {
+                    Text(if (current == null) "Create" else "Save")
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showCreate = false
+                    editing = null
+                    error = null
+                }) {
+                    Text("Cancel")
+                }
+            }
+        )
+    }
+
+    deleting?.let { repository ->
+        AlertDialog(
+            onDismissRequest = { deleting = null },
+            title = { Text("Delete ${repository.name}?") },
+            text = {
+                Text(
+                    "This permanently deletes the repository folder and all files inside it. This cannot be undone."
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        check(
+                            LocalRepositoryStorage.delete(context, repository.folderName)
+                        ) { "Could not delete repository folder." }
+                        database.delete(repository.id)
+                        refreshRepositories()
+                        deleting = null
+                    } catch (exception: Exception) {
+                        deleting = null
+                    }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = { deleting = null }) {
+                    Text("Cancel")
+                }
+            }
         )
     }
 }
