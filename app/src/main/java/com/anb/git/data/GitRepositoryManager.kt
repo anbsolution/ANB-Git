@@ -2,6 +2,7 @@ package com.anb.git.data
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.Status
+import org.eclipse.jgit.lib.Repository
 import org.eclipse.jgit.revwalk.RevCommit
 import java.io.File
 
@@ -22,12 +23,8 @@ data class GitCommitInfo(
     val timestamp: Long
 )
 
-/**
- * Local-only Git operations backed by JGit.
- * Each operation opens and closes its own Git handle.
- */
+/** Local-only Git operations backed by JGit. */
 class GitRepositoryManager(private val repositoryDirectory: File) {
-
     init {
         require(repositoryDirectory.exists() && repositoryDirectory.isDirectory) {
             "Repository directory does not exist."
@@ -35,8 +32,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
     }
 
     fun initialize(): Boolean {
-        val gitDirectory = File(repositoryDirectory, ".git")
-        if (gitDirectory.exists()) return false
+        if (File(repositoryDirectory, ".git").exists()) return false
         Git.init().setDirectory(repositoryDirectory).call().use { }
         return true
     }
@@ -56,11 +52,67 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
+    fun listBranches(): List<String> {
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            return git.branchList().call()
+                .filter { it.name.startsWith("refs/heads/") }
+                .map { it.name.removePrefix("refs/heads/") }
+                .sorted()
+        }
+    }
+
+    fun currentBranch(): String {
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            return git.repository.branch ?: "HEAD"
+        }
+    }
+
+    fun createBranch(name: String): String {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "Branch name cannot be empty." }
+        require(Repository.isValidRefName("refs/heads/$cleanName")) { "Branch name is invalid." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            check(git.repository.resolve("refs/heads/$cleanName") == null) {
+                "A branch with this name already exists."
+            }
+            git.branchCreate().setName(cleanName).call()
+        }
+        return cleanName
+    }
+
+    /** Non-forced checkout; JGit rejects changes that would be overwritten. */
+    fun switchBranch(name: String): String {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "Select a branch first." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            check(git.repository.resolve("refs/heads/$cleanName") != null) { "Branch does not exist." }
+            git.checkout().setName(cleanName).call()
+            return git.repository.branch ?: cleanName
+        }
+    }
+
+    /** Only deletes a non-current branch, without force. */
+    fun deleteBranch(name: String) {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "Select a branch first." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            check(git.repository.branch != cleanName) {
+                "Switch to another branch before deleting the current branch."
+            }
+            check(git.repository.resolve("refs/heads/$cleanName") != null) { "Branch does not exist." }
+            git.branchDelete().setBranchNames(cleanName).setForce(false).call()
+        }
+    }
+
     fun stageAll() {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             git.add().addFilepattern(".").call()
-            // Stage tracked deletions as well as new and modified files.
             git.add().setUpdate(true).addFilepattern(".").call()
         }
     }
@@ -70,13 +122,8 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         require(cleanMessage.isNotEmpty()) { "Commit message cannot be empty." }
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
-            val status = git.status().call()
-            check(!status.isClean) { "There are no changes to commit." }
-            val commit = git.commit()
-                .setMessage(cleanMessage)
-                .setAllowEmpty(false)
-                .call()
-            return commit.toInfo()
+            check(!git.status().call().isClean) { "There are no changes to commit." }
+            return git.commit().setMessage(cleanMessage).setAllowEmpty(false).call().toInfo()
         }
     }
 
@@ -95,7 +142,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
-    private fun RevCommit.toInfo(): GitCommitInfo = GitCommitInfo(
+    private fun RevCommit.toInfo() = GitCommitInfo(
         id = name,
         shortId = name.take(7),
         message = fullMessage.trim(),

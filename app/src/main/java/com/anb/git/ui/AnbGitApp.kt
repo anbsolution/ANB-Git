@@ -367,6 +367,11 @@ private fun GitRepositoryScreen(
     val manager = remember(repository.id, repository.folderName) { GitRepositoryManager(directory) }
     var initialized by remember { androidx.compose.runtime.mutableStateOf(java.io.File(directory, ".git").isDirectory) }
     var branch by remember { androidx.compose.runtime.mutableStateOf("Not initialized") }
+    var branches by remember { androidx.compose.runtime.mutableStateOf(emptyList<String>()) }
+    var showCreateBranch by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var newBranchName by remember { androidx.compose.runtime.mutableStateOf("") }
+    var showDeleteBranch by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var branchToDelete by remember { androidx.compose.runtime.mutableStateOf("") }
     var statusText by remember { androidx.compose.runtime.mutableStateOf("Loading status…") }
     var history by remember { androidx.compose.runtime.mutableStateOf(emptyList<com.anb.git.data.GitCommitInfo>()) }
     var commitMessage by remember { androidx.compose.runtime.mutableStateOf("") }
@@ -379,6 +384,7 @@ private fun GitRepositoryScreen(
             try {
                 val snapshot = manager.status()
                 branch = snapshot.branch
+                branches = manager.listBranches()
                 statusText = if (snapshot.isClean) "Working tree clean" else buildString {
                     appendLine("Staged: ${snapshot.staged.size}")
                     appendLine("Modified: ${snapshot.changed.size}")
@@ -407,6 +413,59 @@ private fun GitRepositoryScreen(
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("Version Control", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Branch: $branch", color = MaterialTheme.colorScheme.primary)
+                if (initialized) {
+                    Row(
+                        modifier = Modifier.fillMaxWidth(),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Text("Branch manager", fontWeight = FontWeight.SemiBold)
+                        OutlinedButton(onClick = { newBranchName = ""; showCreateBranch = true }) {
+                            Icon(Icons.Default.Add, contentDescription = null)
+                            Spacer(Modifier.size(5.dp))
+                            Text("New branch")
+                        }
+                    }
+                    if (branches.isEmpty()) {
+                        Text("No local branches yet. Create the first commit to create the initial branch.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                            branches.forEach { branchName ->
+                                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                                    Row(
+                                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically
+                                    ) {
+                                        Column(Modifier.weight(1f)) {
+                                            Text(branchName, fontWeight = FontWeight.Medium)
+                                            if (branchName == branch) {
+                                                Text("Current branch", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
+                                            }
+                                        }
+                                        if (branchName != branch) {
+                                            TextButton(onClick = {
+                                                try {
+                                                    manager.switchBranch(branchName)
+                                                    reload()
+                                                    notice = "Switched to $branchName."
+                                                    error = null
+                                                } catch (e: Exception) {
+                                                    error = e.message ?: "Could not switch branch. Save or commit local changes first."
+                                                }
+                                            }) { Text("Switch") }
+                                            TextButton(onClick = {
+                                                branchToDelete = branchName
+                                                showDeleteBranch = true
+                                            }) {
+                                                Text("Delete", color = MaterialTheme.colorScheme.error)
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
                 Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (!initialized) {
                     Button(onClick = {
@@ -466,6 +525,70 @@ private fun GitRepositoryScreen(
                 }
             }
         }
+    }
+
+    if (showDeleteBranch) {
+        AlertDialog(
+            onDismissRequest = { showDeleteBranch = false },
+            title = { Text("Delete branch?") },
+            text = {
+                Text("Delete local branch \"$branchToDelete\"? This cannot be undone.")
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        manager.deleteBranch(branchToDelete)
+                        showDeleteBranch = false
+                        notice = "Branch $branchToDelete deleted."
+                        branchToDelete = ""
+                        reload()
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not delete branch."
+                    }
+                }) {
+                    Text("Delete", color = MaterialTheme.colorScheme.error)
+                }
+            },
+            dismissButton = {
+                TextButton(onClick = {
+                    showDeleteBranch = false
+                    branchToDelete = ""
+                }) { Text("Cancel") }
+            }
+        )
+    }
+
+    if (showCreateBranch) {
+        AlertDialog(
+            onDismissRequest = { showCreateBranch = false },
+            title = { Text("Create branch") },
+            text = {
+                OutlinedTextField(
+                    value = newBranchName,
+                    onValueChange = { newBranchName = it },
+                    label = { Text("Branch name") },
+                    singleLine = true
+                )
+            },
+            confirmButton = {
+                TextButton(onClick = {
+                    try {
+                        val created = manager.createBranch(newBranchName)
+                        showCreateBranch = false
+                        newBranchName = ""
+                        reload()
+                        notice = "Branch $created created."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not create branch."
+                    }
+                }) { Text("Create") }
+            },
+            dismissButton = {
+                TextButton(onClick = { showCreateBranch = false }) { Text("Cancel") }
+            }
+        )
     }
 }
 
@@ -715,7 +838,7 @@ private fun SettingsScreen() {
         Card(shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("About", fontWeight = FontWeight.SemiBold)
-                Text("ANB Git v1.0.1")
+                Text("ANB Git v${com.anb.git.BuildConfig.VERSION_NAME}")
                 Text("Offline Git tools with optional secure in-app updates.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
