@@ -90,28 +90,55 @@ fun AnbGitApp() {
     val tabs = AppTab.entries
 
     Scaffold(
+        containerColor = MaterialTheme.colorScheme.background,
         topBar = {
             TopAppBar(
                 title = {
-                    Column {
-                        Text("ANB Git", fontWeight = FontWeight.Bold)
-                        Text(
-                            "Offline Code & Version Control",
-                            style = MaterialTheme.typography.labelSmall,
-                            color = MaterialTheme.colorScheme.onSurfaceVariant
-                        )
+                    Row(verticalAlignment = Alignment.CenterVertically) {
+                        Box(
+                            modifier = Modifier
+                                .size(38.dp)
+                                .background(MaterialTheme.colorScheme.primary, RoundedCornerShape(12.dp)),
+                            contentAlignment = Alignment.Center
+                        ) {
+                            Icon(Icons.Default.Code, contentDescription = null, tint = MaterialTheme.colorScheme.onPrimary)
+                        }
+                        Spacer(Modifier.size(10.dp))
+                        Column(verticalArrangement = Arrangement.spacedBy(1.dp)) {
+                            Text("ANB Git", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleLarge)
+                            Text(
+                                "Developer workspace",
+                                style = MaterialTheme.typography.labelSmall,
+                                color = MaterialTheme.colorScheme.onSurfaceVariant
+                            )
+                        }
                     }
-                }
+                },
+                colors = androidx.compose.material3.TopAppBarDefaults.topAppBarColors(
+                    containerColor = MaterialTheme.colorScheme.surface,
+                    titleContentColor = MaterialTheme.colorScheme.onSurface
+                )
             )
         },
         bottomBar = {
-            NavigationBar {
+            NavigationBar(
+                containerColor = MaterialTheme.colorScheme.surface,
+                contentColor = MaterialTheme.colorScheme.onSurface,
+                tonalElevation = 8.dp
+            ) {
                 tabs.forEachIndexed { index, tab ->
                     NavigationBarItem(
                         selected = selectedTab == index,
                         onClick = { selectedTab = index },
                         icon = { Icon(tab.icon, contentDescription = tab.label) },
-                        label = { Text(tab.label) }
+                        label = { Text(tab.label, fontWeight = if (selectedTab == index) FontWeight.SemiBold else FontWeight.Normal) },
+                        colors = androidx.compose.material3.NavigationBarItemDefaults.colors(
+                            selectedIconColor = MaterialTheme.colorScheme.primary,
+                            selectedTextColor = MaterialTheme.colorScheme.primary,
+                            indicatorColor = MaterialTheme.colorScheme.primaryContainer,
+                            unselectedIconColor = MaterialTheme.colorScheme.onSurfaceVariant,
+                            unselectedTextColor = MaterialTheme.colorScheme.onSurfaceVariant
+                        )
                     )
                 }
             }
@@ -148,9 +175,9 @@ private fun DashboardScreen(
     ) {
         item {
             Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Your workspace", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+                Text("Your workspace", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
                 Text(
-                    "Your code stays on this device. No account or internet connection required.",
+                    "Build, manage and track your projects from one mobile workspace.",
                     color = MaterialTheme.colorScheme.onSurfaceVariant,
                     style = MaterialTheme.typography.bodyMedium
                 )
@@ -166,14 +193,17 @@ private fun DashboardScreen(
                     Row(verticalAlignment = Alignment.CenterVertically) {
                         Icon(Icons.Default.Storage, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
                         Spacer(Modifier.size(8.dp))
-                        Text("Offline storage", fontWeight = FontWeight.SemiBold)
+                        Text("LOCAL WORKSPACE", fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelLarge)
                     }
-                    Text("Private app storage is ready", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+                    Text("Your projects stay on this device", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                     Text(
-                        "Repository files will be stored inside ANB Git's protected app directory.",
+                        "Project files and Git history are stored in ANB Git private app storage.",
                         style = MaterialTheme.typography.bodyMedium
                     )
-                    Text("Connection: Offline-ready", color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.SemiBold)
+                    Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Box(Modifier.size(8.dp).background(SuccessGreen, RoundedCornerShape(50)))
+                        Text("Offline-ready", color = SuccessGreen, fontWeight = FontWeight.SemiBold)
+                    }
                 }
             }
         }
