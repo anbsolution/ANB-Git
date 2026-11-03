@@ -805,6 +805,7 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
         dismissButton = { TextButton(onClick = { showDeleteBranch = false; branchToDelete = "" }) { Text("Cancel") } }
     )
 }
+}
 
 
 @Composable
