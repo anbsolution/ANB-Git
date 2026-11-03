@@ -183,7 +183,11 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
                 .call()
             return GitMergeResult(
                 status = result.mergeStatus.name,
-                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
+                conflicts = if (result.status.name == "CONFLICTING") {
+                    conflictFiles()
+                } else {
+                    emptyList()
+                },
                 newHead = result.newHead?.name
             )
         }
