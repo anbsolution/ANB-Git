@@ -5,7 +5,7 @@ import org.eclipse.jgit.api.Status
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.treewalk.EmptyTreeIterator
-import org.eclipse.jgit.treewalk.DirCacheIterator
+import org.eclipse.jgit.dircache.DirCacheIterator
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
@@ -81,7 +81,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             val stagedEntries = if (repository.resolve("HEAD") == null) {
                 git.diff()
                     .setOldTree(EmptyTreeIterator())
-                    .setNewTree(org.eclipse.jgit.treewalk.DirCacheIterator(repository.readDirCache()))
+                    .setNewTree(DirCacheIterator(repository.readDirCache()))
                     .call()
             } else {
                 git.diff().setCached(true).call()
