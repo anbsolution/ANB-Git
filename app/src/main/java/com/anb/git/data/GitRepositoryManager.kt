@@ -12,6 +12,9 @@ import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
 import java.io.File
+import org.eclipse.jgit.revwalk.RevWalk
+import org.eclipse.jgit.treewalk.CanonicalTreeParser
+import org.eclipse.jgit.treewalk.AbstractTreeIterator
 
 data class GitStatusSnapshot(
     val branch: String,
@@ -76,78 +79,70 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
      * Before the first commit there is no HEAD tree, so compare the index
      * against an empty tree instead of asking JGit for a missing HEAD.
      */
+    /**
+     * Staged = index vs HEAD; unstaged = working tree vs index.
+     * Scan and format each diff with the SAME DiffFormatter so its
+     * ObjectReader / WorkingTreeIterator content sources remain available.
+     */
     fun diffSnapshot(): GitDiffSnapshot {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
-            val repository = git.repository
-            val stagedEntries = stagedDiffEntries(git)
-            val unstagedEntries = unstagedDiffEntries(git)
+            val staged = stagedDiffs(git)
+            val unstaged = unstagedDiffs(git)
             val untracked = git.status().call().untracked.sorted()
-            return GitDiffSnapshot(
-                staged = formatDiffs(git, stagedEntries),
-                unstaged = formatDiffs(git, unstagedEntries),
-                untracked = untracked
-            )
+            return GitDiffSnapshot(staged = staged, unstaged = unstaged, untracked = untracked)
         }
     }
 
-    private fun stagedDiffEntries(git: Git): List<DiffEntry> {
+    private fun stagedDiffs(git: Git): List<GitFileDiff> {
         val repository = git.repository
-        if (repository.resolve(Constants.HEAD) != null) {
-            return git.diff().setCached(true).call()
-        }
+        val headId = repository.resolve(Constants.HEAD)
+            ?: return formatTreeDiff(git, EmptyTreeIterator(), DirCacheIterator(repository.readDirCache()))
 
-        val formatter = DiffFormatter(ByteArrayOutputStream())
-        return try {
-            formatter.setRepository(repository)
-            formatter.setDetectRenames(true)
-            formatter.scan(
-                EmptyTreeIterator(),
-                DirCacheIterator(repository.readDirCache())
-            )
-        } finally {
-            formatter.close()
+        repository.newObjectReader().use { reader ->
+            RevWalk(reader).use { walk ->
+                val headCommit = walk.parseCommit(headId)
+                val headTree = CanonicalTreeParser()
+                headTree.reset(reader, headCommit.tree)
+                return formatTreeDiff(git, headTree, DirCacheIterator(repository.readDirCache()))
+            }
         }
     }
+
+    private fun unstagedDiffs(git: Git): List<GitFileDiff> =
+        formatTreeDiff(git, DirCacheIterator(git.repository.readDirCache()), FileTreeIterator(git.repository))
 
     /**
-     * Compare the index directly with the working tree. This avoids JGit's
-     * default diff tree selection, which may resolve HEAD in edge cases.
+     * Scan and format with the same formatter so working-tree content sources
+     * remain available; formatting with a second formatter can cause
+     * MissingObjectException for working-tree-side content.
      */
-    private fun unstagedDiffEntries(git: Git): List<DiffEntry> {
-        val repository = git.repository
-        val formatter = DiffFormatter(ByteArrayOutputStream())
+    private fun formatTreeDiff(
+        git: Git,
+        oldTree: AbstractTreeIterator,
+        newTree: AbstractTreeIterator
+    ): List<GitFileDiff> {
+        val output = ByteArrayOutputStream()
+        val formatter = DiffFormatter(output)
         return try {
-            formatter.setRepository(repository)
+            formatter.setRepository(git.repository)
             formatter.setDetectRenames(true)
-            formatter.scan(
-                DirCacheIterator(repository.readDirCache()),
-                FileTreeIterator(repository)
-            )
+            val entries = formatter.scan(oldTree, newTree)
+            entries.map { entry ->
+                output.reset()
+                formatter.format(entry)
+                formatter.flush()
+                val path = if (entry.newPath != DiffEntry.DEV_NULL) entry.newPath else entry.oldPath
+                GitFileDiff(
+                    path = path,
+                    changeType = entry.changeType.name,
+                    patch = output.toString(Charsets.UTF_8.name())
+                )
+            }
         } finally {
             formatter.close()
         }
     }
-
-    private fun formatDiffs(git: Git, entries: List<DiffEntry>): List<GitFileDiff> =
-        entries.map { entry ->
-            val output = ByteArrayOutputStream()
-            val formatter = DiffFormatter(output)
-            try {
-                formatter.setRepository(git.repository)
-                formatter.setDetectRenames(true)
-                formatter.format(entry)
-                formatter.flush()
-            } finally {
-                formatter.close()
-            }
-            val path = if (entry.newPath != DiffEntry.DEV_NULL) entry.newPath else entry.oldPath
-            GitFileDiff(
-                path = path,
-                changeType = entry.changeType.name,
-                patch = output.toString(Charsets.UTF_8.name())
-            )
-        }
 
     fun listBranches(): List<String> {
         ensureInitialized()
