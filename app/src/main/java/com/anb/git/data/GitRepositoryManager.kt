@@ -259,7 +259,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
                 .setMessage(cleanMessage)
                 .setAuthor("ANB Git", "anb-git@local.invalid")
                 .setCommitter("ANB Git", "anb-git@local.invalid")
-                .setAllowEmpty(false)
+                .setAllowEmpty(true)
                 .call()
                 .toInfo()
         }
