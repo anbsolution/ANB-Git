@@ -176,13 +176,32 @@ private fun DashboardScreen(
         verticalArrangement = Arrangement.spacedBy(16.dp)
     ) {
         item {
-            Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                Text("Your workspace", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onBackground)
-                Text(
-                    "Build, manage and track your projects from one mobile workspace.",
-                    color = MaterialTheme.colorScheme.onSurfaceVariant,
-                    style = MaterialTheme.typography.bodyMedium
-                )
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(24.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+            ) {
+                Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Text("ANB GIT • DEVELOPER STUDIO",
+                        style = MaterialTheme.typography.labelMedium,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                        fontWeight = FontWeight.Bold)
+                    Text("Your workspace",
+                        style = MaterialTheme.typography.headlineMedium,
+                        fontWeight = FontWeight.Bold,
+                        color = MaterialTheme.colorScheme.onPrimary)
+                    Text("Code, manage repositories and keep your work organized from one mobile workspace.",
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f),
+                        style = MaterialTheme.typography.bodyMedium)
+                    Row(verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.spacedBy(7.dp)) {
+                        Box(Modifier.size(8.dp).background(MaterialTheme.colorScheme.tertiary, RoundedCornerShape(50)))
+                        Text("LOCAL-FIRST WORKSPACE",
+                            color = MaterialTheme.colorScheme.onPrimary,
+                            style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
             }
         }
         item {
@@ -210,9 +229,28 @@ private fun DashboardScreen(
             }
         }
         item {
-            Row(horizontalArrangement = Arrangement.spacedBy(12.dp)) {
-                StatCard("Repositories", "0", Modifier.weight(1f))
-                StatCard("Commits", "0", Modifier.weight(1f))
+            Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                Card(Modifier.weight(1f), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.tertiaryContainer)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Storage, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.onTertiaryContainer)
+                        Text("Offline-first", fontWeight = FontWeight.Bold,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer)
+                        Text("Work on local projects", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onTertiaryContainer)
+                    }
+                }
+                Card(Modifier.weight(1f), shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Icon(Icons.Default.Code, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary)
+                        Text("Git-powered", fontWeight = FontWeight.Bold)
+                        Text("Track your code changes", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
             }
         }
         item {
@@ -239,11 +277,16 @@ private fun DashboardScreen(
             }
         }
         item {
-            Card(shape = RoundedCornerShape(18.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(18.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+            ) {
                 Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                    Text("Phase 1 foundation", fontWeight = FontWeight.Bold)
+                    Text("Built for mobile development", fontWeight = FontWeight.Bold,
+                        style = MaterialTheme.typography.titleMedium)
                     Text(
-                        "Navigation, clean light theme and private storage bootstrap are included. Repository creation and Git operations arrive in later phases.",
+                        "Manage local repositories, edit project files and use Git tools with a consistent royal theme.",
                         color = MaterialTheme.colorScheme.onSurfaceVariant,
                         style = MaterialTheme.typography.bodyMedium
                     )
@@ -1093,7 +1136,22 @@ private fun CodeEditorScreen() {
         Modifier.fillMaxSize().padding(16.dp),
         verticalArrangement = Arrangement.spacedBy(10.dp)
     ) {
-        Text("Code Editor", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(20.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                Text("CODE STUDIO", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.8f),
+                    fontWeight = FontWeight.Bold)
+                Text("Code Editor", style = MaterialTheme.typography.headlineSmall,
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                Text("Browse and edit files in your local projects.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.88f))
+            }
+        }
         if (repositories.isEmpty()) {
             Card(Modifier.fillMaxWidth()) {
                 Column(Modifier.padding(20.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
@@ -1103,7 +1161,14 @@ private fun CodeEditorScreen() {
             }
         } else {
             Box {
-                OutlinedButton(onClick = { repositoryMenu = true }, modifier = Modifier.fillMaxWidth()) {
+                OutlinedButton(
+                    onClick = { repositoryMenu = true },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = ButtonDefaults.outlinedButtonColors(contentColor = MaterialTheme.colorScheme.primary)
+                ) {
+                    Icon(Icons.Default.Folder, contentDescription = null)
+                    Spacer(Modifier.size(8.dp))
                     Text(repo?.name ?: "Select repository")
                 }
                 DropdownMenu(expanded = repositoryMenu, onDismissRequest = { repositoryMenu = false }) {
@@ -1193,13 +1258,23 @@ private fun CodeEditorScreen() {
                             Text("Save")
                         }
                     }
-                    Card(Modifier.weight(1f).fillMaxWidth(), shape = RoundedCornerShape(14.dp)) {
-                        Column(Modifier.fillMaxSize().padding(10.dp)) {
-                            Text(
-                                "LOCAL FILE • ${if (dirty) "UNSAVED CHANGES" else "SAVED"}",
-                                style = MaterialTheme.typography.labelSmall,
-                                color = MaterialTheme.colorScheme.primary
-                            )
+                    Card(
+                        Modifier.weight(1f).fillMaxWidth(),
+                        shape = RoundedCornerShape(18.dp),
+                        colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                        elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                    ) {
+                        Column(Modifier.fillMaxSize().padding(12.dp)) {
+                            Row(verticalAlignment = Alignment.CenterVertically,
+                                horizontalArrangement = Arrangement.SpaceBetween,
+                                modifier = Modifier.fillMaxWidth()) {
+                                Text("LOCAL FILE", style = MaterialTheme.typography.labelSmall,
+                                    color = MaterialTheme.colorScheme.primary, fontWeight = FontWeight.Bold)
+                                Text(if (dirty) "UNSAVED CHANGES" else "SAVED",
+                                    style = MaterialTheme.typography.labelSmall,
+                                    color = if (dirty) MaterialTheme.colorScheme.error else SuccessGreen,
+                                    fontWeight = FontWeight.Bold)
+                            }
                             OutlinedTextField(
                                 value = editorText,
                                 onValueChange = { editorText = it; dirty = true; message = null },
@@ -1269,18 +1344,45 @@ private fun SettingsScreen() {
         modifier = Modifier.fillMaxSize().padding(24.dp),
         verticalArrangement = Arrangement.spacedBy(12.dp)
     ) {
-        Text("Settings", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Column(Modifier.padding(18.dp), verticalArrangement = Arrangement.spacedBy(5.dp)) {
+                Text("ANB GIT • PREFERENCES", style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f))
+                Text("Settings", style = MaterialTheme.typography.headlineMedium,
+                    fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                Text("Personalize your development workspace.",
+                    style = MaterialTheme.typography.bodyMedium,
+                    color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.9f))
+            }
+        }
         Card(shape = RoundedCornerShape(18.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Appearance", fontWeight = FontWeight.SemiBold)
-                Text("Clean White + Royal Blue")
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Appearance", fontWeight = FontWeight.Bold, style = MaterialTheme.typography.titleMedium)
+                Text("Royal Pro • Clean White foundation")
+                Row(horizontalArrangement = Arrangement.spacedBy(9.dp)) {
+                    listOf(MaterialTheme.colorScheme.primary, MaterialTheme.colorScheme.surface,
+                        MaterialTheme.colorScheme.tertiary, MaterialTheme.colorScheme.error).forEach { swatch ->
+                        Box(Modifier.weight(1f).height(34.dp).background(swatch, RoundedCornerShape(9.dp)))
+                    }
+                }
+                Text("Royal Blue • Clean White • Royal Yellow • Royal Red",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         Card(shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Storage", fontWeight = FontWeight.SemiBold)
+                Text("Storage & identity", fontWeight = FontWeight.Bold,
+                    style = MaterialTheme.typography.titleMedium)
                 Text("Private app storage")
                 Text("Package: com.anb.git", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("Your existing app identity and local project storage remain unchanged.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
         InAppUpdateSection()
