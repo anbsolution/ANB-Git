@@ -7,6 +7,7 @@ import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.lib.Constants
 import org.eclipse.jgit.dircache.DirCacheIterator
 import org.eclipse.jgit.treewalk.EmptyTreeIterator
+import org.eclipse.jgit.treewalk.FileTreeIterator
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
@@ -80,7 +81,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
             val stagedEntries = stagedDiffEntries(git)
-            val unstagedEntries = git.diff().call()
+            val unstagedEntries = unstagedDiffEntries(git)
             val untracked = git.status().call().untracked.sorted()
             return GitDiffSnapshot(
                 staged = formatDiffs(git, stagedEntries),
@@ -103,6 +104,25 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             formatter.scan(
                 EmptyTreeIterator(),
                 DirCacheIterator(repository.readDirCache())
+            )
+        } finally {
+            formatter.close()
+        }
+    }
+
+    /**
+     * Compare the index directly with the working tree. This avoids JGit's
+     * default diff tree selection, which may resolve HEAD in edge cases.
+     */
+    private fun unstagedDiffEntries(git: Git): List<DiffEntry> {
+        val repository = git.repository
+        val formatter = DiffFormatter(ByteArrayOutputStream())
+        return try {
+            formatter.setRepository(repository)
+            formatter.setDetectRenames(true)
+            formatter.scan(
+                DirCacheIterator(repository.readDirCache()),
+                FileTreeIterator(repository)
             )
         } finally {
             formatter.close()
