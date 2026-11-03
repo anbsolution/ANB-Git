@@ -153,3 +153,18 @@ The workflow now validates all four signing secrets before invoking
 `assembleRelease`; the Gradle Android signing config is activated only when
 the signing environment is present. Unit tests can configure without secrets,
 and release jobs stop before Gradle if any signing secret is missing.
+
+
+## Signing preflight diagnostics
+
+The workflow now prints a SHA-256 checksum of the restored keystore (not the
+keystore contents), verifies the alias and store password, then signs and
+verifies a temporary test JAR using the private-key password. The actual APK
+release build only begins after these checks pass. Compare with local:
+
+```sh
+sha256sum "$HOME/anb-git-release.jks"
+```
+
+Never share the keystore, its Base64 text, or passwords. A matching hash only
+proves the keystore bytes match; the signing preflight validates credentials.

@@ -38,7 +38,7 @@ jobs:
         run: |
           test -n "$ANB_KEYSTORE_BASE64" || { echo "Missing ANB_KEYSTORE_BASE64 repository secret"; exit 1; }
           mkdir -p "$RUNNER_TEMP/anb-signing"
-          echo "$ANB_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
+          printf "%s" "$ANB_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
           test -s "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
 
       - name: Validate release signing secrets
@@ -51,6 +51,32 @@ jobs:
           test -n "$ANB_KEYSTORE_PASSWORD" || { echo "Missing ANB_KEYSTORE_PASSWORD"; exit 1; }
           test -n "$ANB_KEY_ALIAS" || { echo "Missing ANB_KEY_ALIAS"; exit 1; }
           test -n "$ANB_KEY_PASSWORD" || { echo "Missing ANB_KEY_PASSWORD"; exit 1; }
+
+      - name: Verify restored keystore and private key
+        if: github.event_name != 'pull_request'
+        env:
+          ANB_KEYSTORE_PASSWORD: ${{ secrets.ANB_KEYSTORE_PASSWORD }}
+          ANB_KEY_ALIAS: ${{ secrets.ANB_KEY_ALIAS }}
+          ANB_KEY_PASSWORD: ${{ secrets.ANB_KEY_PASSWORD }}
+        run: |
+          set -euo pipefail
+          KEYSTORE="$RUNNER_TEMP/anb-signing/anb-git-release.jks"
+          echo "Restored keystore SHA-256 (safe to compare with local file):"
+          sha256sum "$KEYSTORE"
+          echo "Checking keystore password and alias..."
+          keytool -list -keystore "$KEYSTORE" -storepass "$ANB_KEYSTORE_PASSWORD" -alias "$ANB_KEY_ALIAS" > /dev/null || {
+            echo "Keystore password, alias, or restored file is incorrect. Compare SHA-256 with original local JKS."; exit 1;
+          }
+          echo "Checking private key access using jarsigner..."
+          mkdir -p "$RUNNER_TEMP/anb-preflight"
+          printf 'ANB Git signing preflight\n' > "$RUNNER_TEMP/anb-preflight/test.txt"
+          jar cf "$RUNNER_TEMP/anb-preflight/test.jar" -C "$RUNNER_TEMP/anb-preflight" test.txt
+          jarsigner -keystore "$KEYSTORE" -storepass "$ANB_KEYSTORE_PASSWORD" -keypass "$ANB_KEY_PASSWORD" \
+            "$RUNNER_TEMP/anb-preflight/test.jar" "$ANB_KEY_ALIAS" > /dev/null || {
+            echo "Private key access failed. Check ANB_KEY_PASSWORD and the original keystore."; exit 1;
+          }
+          jarsigner -verify "$RUNNER_TEMP/anb-preflight/test.jar" > /dev/null
+          echo "Keystore and private-key signing preflight passed."
 
       - name: Build signed release APK
         if: github.event_name != 'pull_request'
