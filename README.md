@@ -136,3 +136,10 @@ configuration is activated only when all four signing environment variables
 are present, and `assembleRelease` explicitly fails if they are missing. This
 allows `testDebugUnitTest` to run before the keystore restore step while
 preventing an accidental unsigned release artifact.
+
+
+### Follow-up Gradle task-scope correction
+
+The `assembleRelease` guard now checks the four environment variables directly
+inside the task action. It no longer references a variable declared inside the
+Android configuration scope, so debug unit-test configuration can compile.

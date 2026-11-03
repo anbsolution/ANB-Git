@@ -89,12 +89,19 @@ dependencies {
 }
 
 
-tasks.configureEach {
-    if (name == "assembleRelease") {
-        doFirst {
-            check(releaseSigningReady) {
-                "Release signing secrets are missing. Configure ANB_KEYSTORE_PATH, ANB_KEYSTORE_PASSWORD, ANB_KEY_ALIAS and ANB_KEY_PASSWORD."
-            }
+tasks.named("assembleRelease") {
+    doFirst {
+        val requiredSigningVars = listOf(
+            "ANB_KEYSTORE_PATH",
+            "ANB_KEYSTORE_PASSWORD",
+            "ANB_KEY_ALIAS",
+            "ANB_KEY_PASSWORD"
+        )
+        val missingSigningVars = requiredSigningVars.filter {
+            System.getenv(it).isNullOrBlank()
+        }
+        check(missingSigningVars.isEmpty()) {
+            "Release signing configuration is incomplete. Missing environment variables: ${missingSigningVars.joinToString()}"
         }
     }
 }
