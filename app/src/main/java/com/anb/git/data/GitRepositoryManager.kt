@@ -4,6 +4,7 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.Status
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.diff.DiffFormatter
+import org.eclipse.jgit.treewalk.EmptyTreeIterator
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
@@ -67,11 +68,23 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
-    /** Staged = index vs HEAD; unstaged = worktree vs index. */
+    /**
+     * Staged = index vs HEAD; unstaged = worktree vs index.
+     * Before the first commit there is no HEAD tree, so compare the index
+     * against an empty tree instead of asking JGit for a missing HEAD.
+     */
     fun diffSnapshot(): GitDiffSnapshot {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
-            val stagedEntries = git.diff().setCached(true).call()
+            val repository = git.repository
+            val stagedEntries = if (repository.resolve("HEAD") == null) {
+                git.diff()
+                    .setOldTree(EmptyTreeIterator())
+                    .setNewTree(org.eclipse.jgit.treewalk.DirCacheIterator(repository.readDirCache()))
+                    .call()
+            } else {
+                git.diff().setCached(true).call()
+            }
             val unstagedEntries = git.diff().call()
             val untracked = git.status().call().untracked.sorted()
             return GitDiffSnapshot(
