@@ -70,6 +70,9 @@ import androidx.compose.ui.Modifier
 import androidx.compose.ui.graphics.vector.ImageVector
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.unit.dp
+import kotlinx.coroutines.withContext
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.Dispatchers
 
 private enum class AppTab(val label: String, val icon: ImageVector) {
     Home("Home", Icons.Default.Home),
@@ -358,13 +361,11 @@ private fun RepositoriesScreen() {
 }
 
 @Composable
-private fun GitRepositoryScreen(
-    repository: LocalRepository,
-    onBack: () -> Unit
-) {
+private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit) {
     val context = LocalContext.current
     val directory = java.io.File(LocalRepositoryStorage.root(context), repository.folderName)
     val manager = remember(repository.id, repository.folderName) { GitRepositoryManager(directory) }
+    val scope = androidx.compose.runtime.rememberCoroutineScope()
     var initialized by remember { androidx.compose.runtime.mutableStateOf(java.io.File(directory, ".git").isDirectory) }
     var branch by remember { androidx.compose.runtime.mutableStateOf("Not initialized") }
     var branches by remember { androidx.compose.runtime.mutableStateOf(emptyList<String>()) }
@@ -377,28 +378,34 @@ private fun GitRepositoryScreen(
     var commitMessage by remember { androidx.compose.runtime.mutableStateOf("") }
     var error by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var notice by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var busy by remember { androidx.compose.runtime.mutableStateOf(false) }
 
-    fun reload() {
-        initialized = java.io.File(directory, ".git").isDirectory
-        if (initialized) {
-            try {
-                val snapshot = manager.status()
-                branch = snapshot.branch
-                branches = manager.listBranches()
-                statusText = if (snapshot.isClean) "Working tree clean" else buildString {
-                    appendLine("Staged: ${snapshot.staged.size}")
-                    appendLine("Modified: ${snapshot.changed.size}")
-                    appendLine("Untracked: ${snapshot.untracked.size}")
-                    append("Removed: ${snapshot.removed.size}")
-                }
-                history = manager.history(30)
-            } catch (e: Exception) {
-                error = e.message ?: "Could not read Git status."
+    suspend fun reload() {
+        try {
+            val data = withContext(Dispatchers.IO) {
+                if (!java.io.File(directory, ".git").isDirectory) null
+                else Triple(manager.status(), manager.listBranches(), manager.history(30))
             }
-        } else {
-            branch = "Not initialized"
-            statusText = "Git repository has not been initialized."
-            history = emptyList()
+            initialized = data != null
+            if (data == null) {
+                branch = "Not initialized"
+                branches = emptyList()
+                statusText = "Git repository has not been initialized."
+                history = emptyList()
+            } else {
+                val st = data.first
+                branch = st.branch
+                branches = data.second
+                statusText = if (st.isClean) "Working tree clean" else buildString {
+                    appendLine("Staged: ${st.staged.size}")
+                    appendLine("Modified: ${st.changed.size}")
+                    appendLine("Untracked: ${st.untracked.size}")
+                    append("Removed: ${st.removed.size}")
+                }
+                history = data.third
+            }
+        } catch (e: Exception) {
+            error = "${e.javaClass.simpleName}: ${e.message ?: "Could not read Git status."}"
         }
     }
     LaunchedEffect(repository.id) { reload() }
@@ -414,51 +421,44 @@ private fun GitRepositoryScreen(
                 Text("Version Control", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
                 Text("Branch: $branch", color = MaterialTheme.colorScheme.primary)
                 if (initialized) {
-                    Row(
-                        modifier = Modifier.fillMaxWidth(),
-                        verticalAlignment = Alignment.CenterVertically,
-                        horizontalArrangement = Arrangement.SpaceBetween
-                    ) {
+                    Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween) {
                         Text("Branch manager", fontWeight = FontWeight.SemiBold)
-                        OutlinedButton(onClick = { newBranchName = ""; showCreateBranch = true }) {
+                        OutlinedButton(enabled = !busy, onClick = { newBranchName = ""; showCreateBranch = true }) {
                             Icon(Icons.Default.Add, contentDescription = null)
-                            Spacer(Modifier.size(5.dp))
-                            Text("New branch")
+                            Spacer(Modifier.size(5.dp)); Text("New branch")
                         }
                     }
                     if (branches.isEmpty()) {
-                        Text("No local branches yet. Create the first commit to create the initial branch.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("No local branches yet. Create the first commit to create the initial branch.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                            branches.forEach { branchName ->
+                            branches.forEach { name ->
                                 Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                                    Row(
-                                        Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
-                                        verticalAlignment = Alignment.CenterVertically
-                                    ) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                                        verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
-                                            Text(branchName, fontWeight = FontWeight.Medium)
-                                            if (branchName == branch) {
-                                                Text("Current branch", color = MaterialTheme.colorScheme.primary, style = MaterialTheme.typography.labelSmall)
-                                            }
+                                            Text(name, fontWeight = FontWeight.Medium)
+                                            if (name == branch) Text("Current branch",
+                                                color = MaterialTheme.colorScheme.primary,
+                                                style = MaterialTheme.typography.labelSmall)
                                         }
-                                        if (branchName != branch) {
-                                            TextButton(onClick = {
-                                                try {
-                                                    manager.switchBranch(branchName)
-                                                    reload()
-                                                    notice = "Switched to $branchName."
-                                                    error = null
-                                                } catch (e: Exception) {
-                                                    error = e.message ?: "Could not switch branch. Save or commit local changes first."
+                                        if (name != branch) {
+                                            TextButton(enabled = !busy, onClick = {
+                                                scope.launch {
+                                                    busy = true
+                                                    try {
+                                                        withContext(Dispatchers.IO) { manager.switchBranch(name) }
+                                                        reload(); notice = "Switched to $name."; error = null
+                                                    } catch (e: Exception) {
+                                                        error = "${e.javaClass.simpleName}: ${e.message ?: "Could not switch branch."}"
+                                                    } finally { busy = false }
                                                 }
                                             }) { Text("Switch") }
-                                            TextButton(onClick = {
-                                                branchToDelete = branchName
-                                                showDeleteBranch = true
-                                            }) {
-                                                Text("Delete", color = MaterialTheme.colorScheme.error)
-                                            }
+                                            TextButton(enabled = !busy, onClick = {
+                                                branchToDelete = name; showDeleteBranch = true
+                                            }) { Text("Delete", color = MaterialTheme.colorScheme.error) }
                                         }
                                     }
                                 }
@@ -468,128 +468,110 @@ private fun GitRepositoryScreen(
                 }
                 Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant)
                 if (!initialized) {
-                    Button(onClick = {
-                        try {
-                            manager.initialize()
-                            reload()
-                            notice = "Git repository initialized."
-                            error = null
-                        } catch (e: Exception) { error = e.message ?: "Git init failed." }
-                    }) { Text("Initialize Git") }
+                    Button(enabled = !busy, onClick = {
+                        scope.launch {
+                            busy = true
+                            try {
+                                withContext(Dispatchers.IO) { manager.initialize() }
+                                reload(); notice = "Git repository initialized."; error = null
+                            } catch (e: Exception) {
+                                error = "${e.javaClass.simpleName}: ${e.message ?: "Git init failed."}"
+                            } finally { busy = false }
+                        }
+                    }) { Text(if (busy) "Please wait…" else "Initialize Git") }
                 } else {
-                    OutlinedTextField(
-                        value = commitMessage,
-                        onValueChange = { commitMessage = it },
-                        label = { Text("Commit message") },
-                        modifier = Modifier.fillMaxWidth()
-                    )
+                    OutlinedTextField(value = commitMessage, onValueChange = { commitMessage = it },
+                        label = { Text("Commit message") }, modifier = Modifier.fillMaxWidth(), enabled = !busy)
                     Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                        Button(onClick = {
-                            try {
-                                manager.stageAll()
-                                reload()
-                                notice = "All changes staged."
-                                error = null
-                            } catch (e: Exception) { error = e.message ?: "Stage failed." }
+                        Button(enabled = !busy, onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    withContext(Dispatchers.IO) { manager.stageAll() }
+                                    reload(); notice = "All changes staged."; error = null
+                                } catch (e: Exception) {
+                                    error = "${e.javaClass.simpleName}: ${e.message ?: "Stage failed."}"
+                                } finally { busy = false }
+                            }
                         }) { Text("Stage all") }
-                        Button(onClick = {
-                            try {
-                                manager.stageAll()
-                                manager.commit(commitMessage)
-                                commitMessage = ""
-                                reload()
-                                notice = "Commit created."
-                                error = null
-                            } catch (e: Exception) { error = "${e.javaClass.simpleName}: ${e.message ?: "No detail"}" }
-                        }) { Text("Commit") }
+                        Button(enabled = !busy, onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    val msg = commitMessage
+                                    withContext(Dispatchers.IO) { manager.stageAll(); manager.commit(msg) }
+                                    commitMessage = ""
+                                    reload(); notice = "Commit created."; error = null
+                                } catch (e: Exception) {
+                                    error = "${e.javaClass.simpleName}: ${e.message ?: "Commit failed."}"
+                                } finally { busy = false }
+                            }
+                        }) { Text(if (busy) "Working…" else "Commit") }
                     }
-                    OutlinedButton(onClick = { reload(); error = null }) { Text("Refresh status") }
+                    OutlinedButton(enabled = !busy, onClick = {
+                        scope.launch { busy = true; try { reload(); error = null } finally { busy = false } }
+                    }) { Text("Refresh status") }
                 }
                 notice?.let { Text(it, color = MaterialTheme.colorScheme.primary) }
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
         Text("Commit history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-        if (history.isEmpty()) {
-            Text("No commits yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
-        } else {
-            LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                items(history.size) { index ->
-                    val commit = history[index]
-                    Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                        Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                            Text(commit.message, fontWeight = FontWeight.SemiBold)
-                            Text("${commit.shortId} • ${commit.author}", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
-                        }
+        if (history.isEmpty()) Text("No commits yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+        else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+            items(history.size) { i ->
+                val c = history[i]
+                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
+                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text(c.message, fontWeight = FontWeight.SemiBold)
+                        Text("${c.shortId} • ${c.author}", style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                 }
             }
         }
     }
 
-    if (showDeleteBranch) {
-        AlertDialog(
-            onDismissRequest = { showDeleteBranch = false },
-            title = { Text("Delete branch?") },
-            text = {
-                Text("Delete local branch \"$branchToDelete\"? This cannot be undone.")
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    try {
-                        manager.deleteBranch(branchToDelete)
-                        showDeleteBranch = false
-                        notice = "Branch $branchToDelete deleted."
-                        branchToDelete = ""
-                        reload()
-                        error = null
-                    } catch (e: Exception) {
-                        error = e.message ?: "Could not delete branch."
-                    }
-                }) {
-                    Text("Delete", color = MaterialTheme.colorScheme.error)
-                }
-            },
-            dismissButton = {
-                TextButton(onClick = {
-                    showDeleteBranch = false
-                    branchToDelete = ""
-                }) { Text("Cancel") }
+    if (showCreateBranch) AlertDialog(
+        onDismissRequest = { showCreateBranch = false },
+        title = { Text("Create branch") },
+        text = { OutlinedTextField(value = newBranchName, onValueChange = { newBranchName = it },
+            label = { Text("Branch name") }, singleLine = true) },
+        confirmButton = { TextButton(enabled = !busy, onClick = {
+            scope.launch {
+                busy = true
+                try {
+                    val n = newBranchName
+                    withContext(Dispatchers.IO) { manager.createBranch(n) }
+                    showCreateBranch = false; newBranchName = ""
+                    reload(); notice = "Branch created."; error = null
+                } catch (e: Exception) {
+                    error = "${e.javaClass.simpleName}: ${e.message ?: "Could not create branch."}"
+                } finally { busy = false }
             }
-        )
-    }
+        }) { Text("Create") } },
+        dismissButton = { TextButton(onClick = { showCreateBranch = false }) { Text("Cancel") } }
+    )
 
-    if (showCreateBranch) {
-        AlertDialog(
-            onDismissRequest = { showCreateBranch = false },
-            title = { Text("Create branch") },
-            text = {
-                OutlinedTextField(
-                    value = newBranchName,
-                    onValueChange = { newBranchName = it },
-                    label = { Text("Branch name") },
-                    singleLine = true
-                )
-            },
-            confirmButton = {
-                TextButton(onClick = {
-                    try {
-                        val created = manager.createBranch(newBranchName)
-                        showCreateBranch = false
-                        newBranchName = ""
-                        reload()
-                        notice = "Branch $created created."
-                        error = null
-                    } catch (e: Exception) {
-                        error = e.message ?: "Could not create branch."
-                    }
-                }) { Text("Create") }
-            },
-            dismissButton = {
-                TextButton(onClick = { showCreateBranch = false }) { Text("Cancel") }
+    if (showDeleteBranch) AlertDialog(
+        onDismissRequest = { showDeleteBranch = false },
+        title = { Text("Delete branch?") },
+        text = { Text("Delete local branch \"$branchToDelete\"? This cannot be undone.") },
+        confirmButton = { TextButton(enabled = !busy, onClick = {
+            scope.launch {
+                busy = true
+                try {
+                    val n = branchToDelete
+                    withContext(Dispatchers.IO) { manager.deleteBranch(n) }
+                    showDeleteBranch = false; branchToDelete = ""
+                    reload(); notice = "Branch $n deleted."; error = null
+                } catch (e: Exception) {
+                    error = "${e.javaClass.simpleName}: ${e.message ?: "Could not delete branch."}"
+                } finally { busy = false }
             }
-        )
-    }
+        }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
+        dismissButton = { TextButton(onClick = { showDeleteBranch = false; branchToDelete = "" }) { Text("Cancel") } }
+    )
 }
 
 @Composable
