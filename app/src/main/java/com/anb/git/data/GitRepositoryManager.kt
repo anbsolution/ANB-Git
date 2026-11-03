@@ -183,11 +183,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
                 .call()
             return GitMergeResult(
                 status = result.mergeStatus.name,
-                conflicts = if (result.status.name == "CONFLICTING") {
-                    conflictFiles()
-                } else {
-                    emptyList()
-                },
+                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
                 newHead = result.newHead?.name
             )
         }
@@ -221,7 +217,11 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             val result = git.cherryPick().include(commit).call()
             return GitCherryPickResult(
                 status = result.status.name,
-                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
+                conflicts = if (result.status.name == "CONFLICTING") {
+                    conflictFiles()
+                } else {
+                    emptyList()
+                },
                 newHead = result.newHead?.name
             )
         }
