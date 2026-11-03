@@ -2,8 +2,11 @@ package com.anb.git.data
 
 import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.Status
-import org.eclipse.jgit.lib.Repository
+import org.eclipse.jgit.diff.DiffEntry
+import org.eclipse.jgit.diff.DiffFormatter
 import org.eclipse.jgit.revwalk.RevCommit
+import org.eclipse.jgit.lib.Repository
+import java.io.ByteArrayOutputStream
 import java.io.File
 
 data class GitStatusSnapshot(
@@ -21,6 +24,18 @@ data class GitCommitInfo(
     val message: String,
     val author: String,
     val timestamp: Long
+)
+
+data class GitFileDiff(
+    val path: String,
+    val changeType: String,
+    val patch: String
+)
+
+data class GitDiffSnapshot(
+    val staged: List<GitFileDiff>,
+    val unstaged: List<GitFileDiff>,
+    val untracked: List<String>
 )
 
 /** Local-only Git operations backed by JGit. */
@@ -51,6 +66,41 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             )
         }
     }
+
+    /** Staged = index vs HEAD; unstaged = worktree vs index. */
+    fun diffSnapshot(): GitDiffSnapshot {
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val stagedEntries = git.diff().setCached(true).call()
+            val unstagedEntries = git.diff().call()
+            val untracked = git.status().call().untracked.sorted()
+            return GitDiffSnapshot(
+                staged = formatDiffs(git, stagedEntries),
+                unstaged = formatDiffs(git, unstagedEntries),
+                untracked = untracked
+            )
+        }
+    }
+
+    private fun formatDiffs(git: Git, entries: List<DiffEntry>): List<GitFileDiff> =
+        entries.map { entry ->
+            val output = ByteArrayOutputStream()
+            val formatter = DiffFormatter(output)
+            try {
+                formatter.setRepository(git.repository)
+                formatter.setDetectRenames(true)
+                formatter.format(entry)
+                formatter.flush()
+            } finally {
+                formatter.close()
+            }
+            val path = if (entry.newPath != DiffEntry.DEV_NULL) entry.newPath else entry.oldPath
+            GitFileDiff(
+                path = path,
+                changeType = entry.changeType.name,
+                patch = output.toString(Charsets.UTF_8.name())
+            )
+        }
 
     fun listBranches(): List<String> {
         ensureInitialized()
@@ -83,7 +133,6 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         return cleanName
     }
 
-    /** Non-forced checkout; JGit rejects changes that would be overwritten. */
     fun switchBranch(name: String): String {
         val cleanName = name.trim()
         require(cleanName.isNotEmpty()) { "Select a branch first." }
@@ -95,7 +144,6 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
-    /** Only deletes a non-current branch, without force. */
     fun deleteBranch(name: String) {
         val cleanName = name.trim()
         require(cleanName.isNotEmpty()) { "Select a branch first." }

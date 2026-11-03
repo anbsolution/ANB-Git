@@ -1,5 +1,7 @@
 package com.anb.git.ui
 
+import androidx.compose.foundation.layout.heightIn
+
 import androidx.compose.ui.text.font.FontFamily
 import androidx.compose.ui.text.TextStyle
 import androidx.compose.runtime.mutableStateListOf
@@ -379,6 +381,8 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     var error by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var notice by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
     var busy by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var showDiffViewer by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var diffSnapshot by remember { mutableStateOf<com.anb.git.data.GitDiffSnapshot?>(null) }
 
     suspend fun reload() {
         try {
@@ -509,6 +513,18 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         }) { Text(if (busy) "Working…" else "Commit") }
                     }
                     OutlinedButton(enabled = !busy, onClick = {
+                        scope.launch {
+                            busy = true
+                            try {
+                                diffSnapshot = withContext(Dispatchers.IO) { manager.diffSnapshot() }
+                                showDiffViewer = true
+                                error = null
+                            } catch (e: Exception) {
+                                error = "${e.javaClass.simpleName}: ${e.message ?: "Could not load diff."}"
+                            } finally { busy = false }
+                        }
+                    }) { Text("View diff") }
+                    OutlinedButton(enabled = !busy, onClick = {
                         scope.launch { busy = true; try { reload(); error = null } finally { busy = false } }
                     }) { Text("Refresh status") }
                 }
@@ -530,6 +546,10 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                 }
             }
         }
+    }
+
+    if (showDiffViewer) {
+        DiffViewerDialog(snapshot = diffSnapshot, onDismiss = { showDiffViewer = false })
     }
 
     if (showCreateBranch) AlertDialog(
@@ -571,6 +591,59 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
             }
         }) { Text("Delete", color = MaterialTheme.colorScheme.error) } },
         dismissButton = { TextButton(onClick = { showDeleteBranch = false; branchToDelete = "" }) { Text("Cancel") } }
+    )
+}
+
+
+@Composable
+private fun DiffViewerDialog(
+    snapshot: com.anb.git.data.GitDiffSnapshot?,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Diff Viewer") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 520.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(10.dp)
+            ) {
+                if (snapshot == null) {
+                    Text("No diff data available.")
+                } else {
+                    Text("Staged changes (${snapshot.staged.size})", fontWeight = FontWeight.Bold)
+                    if (snapshot.staged.isEmpty()) {
+                        Text("No staged changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else snapshot.staged.forEach { file ->
+                        Text("${file.changeType} • ${file.path}", fontWeight = FontWeight.SemiBold)
+                        Text(file.patch, fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    HorizontalDivider()
+                    Text("Unstaged changes (${snapshot.unstaged.size})", fontWeight = FontWeight.Bold)
+                    if (snapshot.unstaged.isEmpty()) {
+                        Text("No unstaged changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else snapshot.unstaged.forEach { file ->
+                        Text("${file.changeType} • ${file.path}", fontWeight = FontWeight.SemiBold)
+                        Text(file.patch, fontFamily = FontFamily.Monospace,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                    HorizontalDivider()
+                    Text("Untracked files (${snapshot.untracked.size})", fontWeight = FontWeight.Bold)
+                    if (snapshot.untracked.isEmpty()) {
+                        Text("No untracked files.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    } else {
+                        snapshot.untracked.forEach { path ->
+                            Text("UNTRACKED • $path", color = MaterialTheme.colorScheme.primary)
+                        }
+                        Text("Stage an untracked file to view its content diff.",
+                            color = MaterialTheme.colorScheme.onSurfaceVariant,
+                            style = MaterialTheme.typography.bodySmall)
+                    }
+                }
+            }
+        },
+        confirmButton = { TextButton(onClick = onDismiss) { Text("Close") } }
     )
 }
 
