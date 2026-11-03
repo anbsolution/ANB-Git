@@ -35,9 +35,7 @@ private val LightColors = lightColorScheme(
     onSurface = TextPrimary,
     surfaceVariant = SoftBlue,
     onSurfaceVariant = TextSecondary,
-    outline = BorderSubtle,
-    error = androidx.compose.ui.graphics.Color(0xFFB42318),
-    onError = AppWhite
+    outline = BorderSubtle
 )
 
 private val AnbTypography = Typography(

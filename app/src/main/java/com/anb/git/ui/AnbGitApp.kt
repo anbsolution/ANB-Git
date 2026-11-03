@@ -1,5 +1,7 @@
 package com.anb.git.ui
 
+import com.anb.git.ui.theme.SuccessGreen
+
 import androidx.compose.foundation.layout.heightIn
 
 import androidx.compose.ui.text.font.FontFamily
