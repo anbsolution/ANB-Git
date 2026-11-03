@@ -558,6 +558,31 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         Text(c.message, fontWeight = FontWeight.SemiBold)
                         Text("${c.shortId} • ${c.author}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        TextButton(enabled = !busy, onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    val result = withContext(Dispatchers.IO) { manager.cherryPickCommit(c.id) }
+                                    reload()
+                                    if (result.conflicts.isNotEmpty()) {
+                                        conflictPaths = withContext(Dispatchers.IO) { manager.conflictFiles() }
+                                        selectedConflict = conflictPaths.firstOrNull()
+                                        conflictContent = selectedConflict?.let { path ->
+                                            val file = java.io.File(directory, path)
+                                            if (file.isFile) file.readText() else ""
+                                        } ?: ""
+                                        mergeCommitMessage = "Cherry-pick ${c.shortId}: ${c.message.lineSequence().firstOrNull().orEmpty()}"
+                                        showConflictDialog = true
+                                        notice = "Cherry-pick paused. Resolve ${result.conflicts.size} conflicting file(s)."
+                                    } else {
+                                        notice = "Cherry-pick ${result.status.lowercase().replace('_', ' ')}."
+                                    }
+                                    error = null
+                                } catch (e: Exception) {
+                                    error = "${e.javaClass.simpleName}: ${e.message ?: "Cherry-pick failed."}"
+                                } finally { busy = false }
+                            }
+                        }) { Text("Cherry-pick") }
                     }
                 }
             }
@@ -633,7 +658,7 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         withContext(Dispatchers.IO) { manager.continueMerge(mergeCommitMessage) }
                         showConflictDialog = false
                         reload()
-                        notice = "Merge completed and commit created."
+                        notice = "Operation completed and commit created."
                         error = null
                     } catch (e: Exception) {
                         error = e.message ?: "Could not continue merge."

@@ -45,6 +45,12 @@ data class GitDiffSnapshot(
     val untracked: List<String>
 )
 
+data class GitCherryPickResult(
+    val status: String,
+    val conflicts: List<String>,
+    val newHead: String?
+)
+
 data class GitMergeResult(
     val status: String,
     val conflicts: List<String>,
@@ -184,6 +190,39 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
     }
 
 
+
+    /**
+     * Apply one existing commit to the current branch.
+     * Requires a clean worktree. Conflicts are left for the existing resolver.
+     */
+    fun cherryPickCommit(commitId: String): GitCherryPickResult {
+        val cleanId = commitId.trim()
+        require(cleanId.isNotEmpty()) { "Select a commit to cherry-pick." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            check(git.status().call().isClean) {
+                "Commit or discard working-tree changes before cherry-picking."
+            }
+            check(!File(repository.directory, "MERGE_HEAD").exists() &&
+                !File(repository.directory, "CHERRY_PICK_HEAD").exists()) {
+                "Finish or abort the current merge/cherry-pick first."
+            }
+            val objectId = repository.resolve(cleanId)
+                ?: throw IllegalArgumentException("Commit was not found.")
+            val commit = RevWalk(repository).use { walk -> walk.parseCommit(objectId) }
+            repository.config.setString("user", null, "name", "ANB Git")
+            repository.config.setString("user", null, "email", "anb-git@local.invalid")
+            repository.config.save()
+            val result = git.cherryPick().include(commit).call()
+            return GitCherryPickResult(
+                status = result.status.name,
+                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
+                newHead = result.newHead?.name
+            )
+        }
+    }
+
     /** Paths whose index contains unresolved stages (1/2/3). */
     fun conflictFiles(): List<String> {
         ensureInitialized()
@@ -252,7 +291,10 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
-            check(repository.readMergeHeads()?.isNotEmpty() == true) { "No merge is currently in progress." }
+            check(repository.readMergeHeads()?.isNotEmpty() == true ||
+                File(repository.directory, "CHERRY_PICK_HEAD").isFile) {
+                "No merge or cherry-pick is currently in progress."
+            }
             val unresolved = conflictFiles()
             check(unresolved.isEmpty()) { "Resolve all conflicts first: ${unresolved.joinToString()}" }
             return git.commit()

@@ -150,4 +150,52 @@ class GitRepositoryManagerTest {
         }
     }
 
+
+    @Test
+    fun cherryPickAppliesCommitFromAnotherBranch() {
+        val root = Files.createTempDirectory("anb-git-cherry-pick").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            File(root, "base.txt").writeText("base\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            manager.switchBranch("feature")
+            File(root, "feature.txt").writeText("feature content\n")
+            manager.stageAll()
+            val featureCommit = manager.commit("Feature commit")
+            manager.switchBranch("master")
+            val result = manager.cherryPickCommit(featureCommit.id)
+            assertEquals("OK", result.status)
+            assertTrue(result.conflicts.isEmpty())
+            assertEquals("feature content\n", File(root, "feature.txt").readText())
+            assertTrue(manager.history().any { it.message == "Feature commit" })
+            assertTrue(manager.status().isClean)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun cherryPickRequiresCleanWorkingTree() {
+        val root = Files.createTempDirectory("anb-git-cherry-pick-dirty").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            File(root, "base.txt").writeText("base\n")
+            manager.stageAll()
+            val commit = manager.commit("Base commit")
+            File(root, "base.txt").writeText("uncommitted change\n")
+            try {
+                manager.cherryPickCommit(commit.id)
+                throw AssertionError("Expected dirty working tree to be rejected.")
+            } catch (expected: IllegalStateException) {
+                assertTrue(expected.message.orEmpty().contains("working-tree changes"))
+            }
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }
