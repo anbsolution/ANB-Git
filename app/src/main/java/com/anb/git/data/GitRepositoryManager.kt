@@ -57,6 +57,13 @@ data class GitMergeResult(
     val newHead: String?
 )
 
+data class GitRevertResult(
+    val status: String,
+    val conflicts: List<String>,
+    val failingPaths: List<String>,
+    val newHead: String?
+)
+
 /** Local-only Git operations backed by JGit. */
 class GitRepositoryManager(private val repositoryDirectory: File) {
     init {
@@ -227,6 +234,44 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
+    /**
+     * Revert one non-merge commit on the current branch.
+     * Requires a clean worktree and no other in-progress Git operation.
+     * Merge commits are rejected until an explicit mainline-parent selector exists.
+     */
+    fun revertCommit(commitId: String): GitRevertResult {
+        val cleanId = commitId.trim()
+        require(cleanId.isNotEmpty()) { "Select a commit to revert." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            check(git.status().call().isClean) {
+                "Commit or discard working-tree changes before reverting."
+            }
+            check(!File(repository.directory, "MERGE_HEAD").exists() &&
+                !File(repository.directory, "CHERRY_PICK_HEAD").exists() &&
+                !File(repository.directory, "REVERT_HEAD").exists()) {
+                "Finish or abort the current Git operation first."
+            }
+            val objectId = repository.resolve(cleanId)
+                ?: throw IllegalArgumentException("Commit was not found.")
+            val commit = RevWalk(repository).use { walk -> walk.parseCommit(objectId) }
+            require(commit.parentCount <= 1) {
+                "Reverting a merge commit requires selecting a mainline parent; this is not supported yet."
+            }
+            repository.config.setString("user", null, "name", "ANB Git")
+            repository.config.setString("user", null, "email", "anb-git@local.invalid")
+            repository.config.save()
+            val result = git.revert().include(commit).call()
+            return GitRevertResult(
+                status = result.status.name,
+                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
+                failingPaths = result.failingPaths?.keys?.sorted().orEmpty(),
+                newHead = result.newHead?.name
+            )
+        }
+    }
+
     /** Paths whose index contains unresolved stages (1/2/3). */
     fun conflictFiles(): List<String> {
         ensureInitialized()
@@ -296,8 +341,9 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
             check(repository.readMergeHeads()?.isNotEmpty() == true ||
-                File(repository.directory, "CHERRY_PICK_HEAD").isFile) {
-                "No merge or cherry-pick is currently in progress."
+                File(repository.directory, "CHERRY_PICK_HEAD").isFile ||
+                File(repository.directory, "REVERT_HEAD").isFile) {
+                "No merge, cherry-pick or revert is currently in progress."
             }
             val unresolved = conflictFiles()
             check(unresolved.isEmpty()) { "Resolve all conflicts first: ${unresolved.joinToString()}" }
@@ -318,8 +364,9 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             val repository = git.repository
             val mergeInProgress = repository.readMergeHeads()?.isNotEmpty() == true
             val cherryPickInProgress = File(repository.directory, "CHERRY_PICK_HEAD").isFile
-            check(mergeInProgress || cherryPickInProgress) {
-                "No merge or cherry-pick is currently in progress."
+            val revertInProgress = File(repository.directory, "REVERT_HEAD").isFile
+            check(mergeInProgress || cherryPickInProgress || revertInProgress) {
+                "No merge, cherry-pick or revert is currently in progress."
             }
             // JGit's HARD reset clears the operation state for the detected repository state.
             git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD)
@@ -327,6 +374,10 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             if (mergeInProgress) {
                 repository.writeMergeHeads(null)
                 repository.writeMergeCommitMsg(null)
+            }
+            if (revertInProgress) {
+                File(repository.directory, "REVERT_HEAD").delete()
+                File(repository.directory, "REVERT_MSG").delete()
             }
         }
     }

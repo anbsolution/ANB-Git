@@ -583,11 +583,36 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                                 } finally { busy = false }
                             }
                         }) { Text("Cherry-pick") }
+                        TextButton(enabled = !busy, onClick = {
+                            scope.launch {
+                                busy = true
+                                try {
+                                    val result = withContext(Dispatchers.IO) { manager.revertCommit(c.id) }
+                                    reload()
+                                    if (result.conflicts.isNotEmpty()) {
+                                        conflictPaths = withContext(Dispatchers.IO) { manager.conflictFiles() }
+                                        selectedConflict = conflictPaths.firstOrNull()
+                                        conflictContent = selectedConflict?.let { path ->
+                                            val file = java.io.File(directory, path)
+                                            if (file.isFile) file.readText() else ""
+                                        } ?: ""
+                                        mergeCommitMessage = "Revert ${c.shortId}: ${c.message.lineSequence().firstOrNull().orEmpty()}"
+                                        showConflictDialog = true
+                                        notice = "Revert paused. Resolve ${result.conflicts.size} conflicting file(s)."
+                                    } else {
+                                        notice = "Revert ${result.status.lowercase().replace('_', ' ')}."
+                                    }
+                                    error = null
+                                } catch (e: Exception) {
+                                    error = "${e.javaClass.simpleName}: ${e.message ?: "Revert failed."}"
+                                } finally { busy = false }
+                            }
+                        }) { Text("Revert") }
                     }
                 }
             }
         }
-    }
+
 
 
     if (showConflictDialog) {
@@ -853,7 +878,7 @@ private fun MergeConflictDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Continue Merge") }
                 OutlinedButton(enabled = !busy, onClick = onAbort, modifier = Modifier.fillMaxWidth()) {
-                    Text("Abort Merge / Cherry-pick")
+                    Text("Abort Merge / Cherry-pick / Revert")
                 }
             }
         },

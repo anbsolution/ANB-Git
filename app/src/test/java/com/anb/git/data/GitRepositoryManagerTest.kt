@@ -215,6 +215,94 @@ class GitRepositoryManagerTest {
     }
 
     @Test
+    fun revertCommitCreatesInverseCommitAndRestoresPreviousContent() {
+        val root = Files.createTempDirectory("anb-git-revert-success").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "sample.txt")
+            sample.writeText("before\\n")
+            manager.stageAll()
+            manager.commit("Initial commit")
+            sample.writeText("after\\n")
+            manager.stageAll()
+            val target = manager.commit("Change content")
+
+            val result = manager.revertCommit(target.id)
+
+            assertEquals("OK", result.status)
+            assertTrue(result.conflicts.isEmpty())
+            assertEquals("before\\n", sample.readText())
+            assertTrue(manager.status().isClean)
+            assertTrue(manager.history().first().message.contains("Revert"))
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun revertConflictCanBeResolvedAndContinued() {
+        val root = Files.createTempDirectory("anb-git-revert-conflict").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base\\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            sample.writeText("target change\\n")
+            manager.stageAll()
+            val target = manager.commit("Target change")
+            sample.writeText("later change\\n")
+            manager.stageAll()
+            manager.commit("Later change")
+
+            val result = manager.revertCommit(target.id)
+
+            assertEquals("CONFLICTING", result.status)
+            assertTrue(result.conflicts.contains("shared.txt"))
+            manager.resolveConflict("shared.txt", "INCOMING")
+            val completed = manager.continueMerge("Complete revert")
+            assertEquals("Complete revert", completed.message)
+            assertEquals("base\\n", sample.readText())
+            assertTrue(manager.status().isClean)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun abortRevertRestoresPreOperationState() {
+        val root = Files.createTempDirectory("anb-git-revert-abort").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base\\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            sample.writeText("target change\\n")
+            manager.stageAll()
+            val target = manager.commit("Target change")
+            sample.writeText("later change\\n")
+            manager.stageAll()
+            manager.commit("Later change")
+
+            val result = manager.revertCommit(target.id)
+            assertEquals("CONFLICTING", result.status)
+            assertTrue(File(root, ".git/REVERT_HEAD").isFile)
+
+            manager.abortMerge()
+
+            assertEquals("later change\\n", sample.readText())
+            assertTrue(manager.status().isClean)
+            assertFalse(File(root, ".git/REVERT_HEAD").exists())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
     fun cherryPickRequiresCleanWorkingTree() {
         val root = Files.createTempDirectory("anb-git-cherry-pick-dirty").toFile()
         try {
