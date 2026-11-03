@@ -143,3 +143,13 @@ preventing an accidental unsigned release artifact.
 The `assembleRelease` guard now checks the four environment variables directly
 inside the task action. It no longer references a variable declared inside the
 Android configuration scope, so debug unit-test configuration can compile.
+
+
+### Release task registration correction
+
+Removed the eager `tasks.named("assembleRelease")` lookup because Android Gradle
+Plugin registers that task after this script's early configuration point.
+The workflow now validates all four signing secrets before invoking
+`assembleRelease`; the Gradle Android signing config is activated only when
+the signing environment is present. Unit tests can configure without secrets,
+and release jobs stop before Gradle if any signing secret is missing.

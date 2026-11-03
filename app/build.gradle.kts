@@ -87,21 +87,3 @@ dependencies {
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
 }
-
-
-tasks.named("assembleRelease") {
-    doFirst {
-        val requiredSigningVars = listOf(
-            "ANB_KEYSTORE_PATH",
-            "ANB_KEYSTORE_PASSWORD",
-            "ANB_KEY_ALIAS",
-            "ANB_KEY_PASSWORD"
-        )
-        val missingSigningVars = requiredSigningVars.filter {
-            System.getenv(it).isNullOrBlank()
-        }
-        check(missingSigningVars.isEmpty()) {
-            "Release signing configuration is incomplete. Missing environment variables: ${missingSigningVars.joinToString()}"
-        }
-    }
-}

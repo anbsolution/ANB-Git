@@ -41,6 +41,17 @@ jobs:
           echo "$ANB_KEYSTORE_BASE64" | base64 --decode > "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
           test -s "$RUNNER_TEMP/anb-signing/anb-git-release.jks"
 
+      - name: Validate release signing secrets
+        if: github.event_name != 'pull_request'
+        env:
+          ANB_KEYSTORE_PASSWORD: ${{ secrets.ANB_KEYSTORE_PASSWORD }}
+          ANB_KEY_ALIAS: ${{ secrets.ANB_KEY_ALIAS }}
+          ANB_KEY_PASSWORD: ${{ secrets.ANB_KEY_PASSWORD }}
+        run: |
+          test -n "$ANB_KEYSTORE_PASSWORD" || { echo "Missing ANB_KEYSTORE_PASSWORD"; exit 1; }
+          test -n "$ANB_KEY_ALIAS" || { echo "Missing ANB_KEY_ALIAS"; exit 1; }
+          test -n "$ANB_KEY_PASSWORD" || { echo "Missing ANB_KEY_PASSWORD"; exit 1; }
+
       - name: Build signed release APK
         if: github.event_name != 'pull_request'
         env:
