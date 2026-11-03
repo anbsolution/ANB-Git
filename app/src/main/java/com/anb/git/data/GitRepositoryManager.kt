@@ -256,18 +256,35 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             val objectId = repository.resolve(cleanId)
                 ?: throw IllegalArgumentException("Commit was not found.")
             val commit = RevWalk(repository).use { walk -> walk.parseCommit(objectId) }
-            require(commit.parentCount <= 1) {
-                "Reverting a merge commit requires selecting a mainline parent; this is not supported yet."
+            require(commit.parentCount == 1) {
+                "This version supports reverting normal commits with exactly one parent. Merge and root commits are not supported yet."
             }
             repository.config.setString("user", null, "name", "ANB Git")
             repository.config.setString("user", null, "email", "anb-git@local.invalid")
             repository.config.save()
-            val result = git.revert().include(commit).call()
+
+            // JGit 6.10 RevertCommand.call() returns RevCommit?:
+            // a new commit on success, or null when the revert pauses on conflicts.
+            // Conflict details are read from the RevertCommand itself.
+            val revertCommand = git.revert().include(commit)
+            val newHead = revertCommand.call()
+            val conflicts = revertCommand.unmergedPaths.orEmpty().sorted()
+            val failingPaths = revertCommand.failingResult
+                ?.failingPaths
+                ?.keys
+                ?.sorted()
+                .orEmpty()
+            val status = when {
+                newHead != null -> "OK"
+                conflicts.isNotEmpty() -> "CONFLICTING"
+                failingPaths.isNotEmpty() -> "FAILED"
+                else -> "FAILED"
+            }
             return GitRevertResult(
-                status = result.status.name,
-                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
-                failingPaths = result.failingPaths?.keys?.sorted().orEmpty(),
-                newHead = result.newHead?.name
+                status = status,
+                conflicts = conflicts,
+                failingPaths = failingPaths,
+                newHead = newHead?.name
             )
         }
     }
@@ -377,7 +394,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             }
             if (revertInProgress) {
                 File(repository.directory, "REVERT_HEAD").delete()
-                File(repository.directory, "REVERT_MSG").delete()
+                repository.writeMergeCommitMsg(null)
             }
         }
     }
