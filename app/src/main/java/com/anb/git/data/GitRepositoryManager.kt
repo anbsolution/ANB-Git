@@ -123,7 +123,13 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             check(!git.status().call().isClean) { "There are no changes to commit." }
-            return git.commit().setMessage(cleanMessage).setAllowEmpty(false).call().toInfo()
+            return git.commit()
+                .setMessage(cleanMessage)
+                .setAuthor("ANB Git", "anb-git@local.invalid")
+                .setCommitter("ANB Git", "anb-git@local.invalid")
+                .setAllowEmpty(false)
+                .call()
+                .toInfo()
         }
     }
 
