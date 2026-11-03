@@ -1,6 +1,7 @@
 package com.anb.git.data
 
 import org.junit.Assert.assertEquals
+import org.junit.Assert.assertFalse
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -172,6 +173,42 @@ class GitRepositoryManagerTest {
             assertEquals("feature content\n", File(root, "feature.txt").readText())
             assertTrue(manager.history().any { it.message == "Feature commit" })
             assertTrue(manager.status().isClean)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun abortCherryPickRestoresCurrentBranchAndClearsConflictState() {
+        val root = Files.createTempDirectory("anb-git-abort-cherry-pick").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            manager.switchBranch("feature")
+            sample.writeText("feature version\n")
+            manager.stageAll()
+            val featureCommit = manager.commit("Feature change")
+            manager.switchBranch("master")
+            sample.writeText("current version\n")
+            manager.stageAll()
+            manager.commit("Current change")
+
+            val result = manager.cherryPickCommit(featureCommit.id)
+            assertEquals("CONFLICTING", result.status)
+            assertTrue(result.conflicts.contains("shared.txt"))
+            assertTrue(File(root, ".git/CHERRY_PICK_HEAD").isFile)
+
+            manager.abortMerge()
+
+            assertEquals("current version\n", sample.readText())
+            assertTrue(manager.conflictFiles().isEmpty())
+            assertTrue(manager.status().isClean)
+            assertFalse(File(root, ".git/CHERRY_PICK_HEAD").exists())
         } finally {
             root.deleteRecursively()
         }

@@ -311,16 +311,23 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
-    /** Abort an in-progress merge and restore the current branch HEAD. */
+    /** Abort an in-progress merge or cherry-pick and restore the current branch HEAD. */
     fun abortMerge() {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
-            check(repository.readMergeHeads()?.isNotEmpty() == true) { "No merge is currently in progress." }
+            val mergeInProgress = repository.readMergeHeads()?.isNotEmpty() == true
+            val cherryPickInProgress = File(repository.directory, "CHERRY_PICK_HEAD").isFile
+            check(mergeInProgress || cherryPickInProgress) {
+                "No merge or cherry-pick is currently in progress."
+            }
+            // JGit's HARD reset clears the operation state for the detected repository state.
             git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD)
                 .setRef(Constants.HEAD).call()
-            repository.writeMergeHeads(null)
-            repository.writeMergeCommitMsg(null)
+            if (mergeInProgress) {
+                repository.writeMergeHeads(null)
+                repository.writeMergeCommitMsg(null)
+            }
         }
     }
 

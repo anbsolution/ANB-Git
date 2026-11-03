@@ -672,7 +672,7 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         withContext(Dispatchers.IO) { manager.abortMerge() }
                         showConflictDialog = false
                         reload()
-                        notice = "Merge aborted. Current branch restored."
+                        notice = "Merge / cherry-pick aborted. Current branch restored."
                         error = null
                     } catch (e: Exception) {
                         error = e.message ?: "Could not abort merge."
@@ -853,7 +853,7 @@ private fun MergeConflictDialog(
                     modifier = Modifier.fillMaxWidth()
                 ) { Text("Continue Merge") }
                 OutlinedButton(enabled = !busy, onClick = onAbort, modifier = Modifier.fillMaxWidth()) {
-                    Text("Abort Merge")
+                    Text("Abort Merge / Cherry-pick")
                 }
             }
         },
