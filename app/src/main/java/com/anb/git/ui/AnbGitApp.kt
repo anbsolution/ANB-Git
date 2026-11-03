@@ -289,19 +289,35 @@ private fun RepositoriesScreen() {
             onBack = { selected = null }
         )
     } else {
-        Column(Modifier.fillMaxSize().padding(20.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
-            Row(
-                Modifier.fillMaxWidth(),
-                verticalAlignment = Alignment.CenterVertically,
-                horizontalArrangement = Arrangement.SpaceBetween
+        Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(14.dp)) {
+            Card(
+                modifier = Modifier.fillMaxWidth(),
+                shape = RoundedCornerShape(22.dp),
+                colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
             ) {
-                Column {
-                    Text("Repositories", style = MaterialTheme.typography.headlineMedium, fontWeight = FontWeight.Bold)
-                    Text("${repositories.size} local repositories", color = MaterialTheme.colorScheme.onSurfaceVariant)
-                }
-                Button(onClick = { name = ""; error = null; showCreate = true }) {
-                    Icon(Icons.Default.Add, contentDescription = null)
-                    Spacer(Modifier.size(5.dp)); Text("New")
+                Row(
+                    Modifier.fillMaxWidth().padding(18.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(verticalArrangement = Arrangement.spacedBy(4.dp)) {
+                        Text("Your repositories", style = MaterialTheme.typography.headlineSmall,
+                            fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                        Text("${repositories.size} local projects",
+                            style = MaterialTheme.typography.bodyMedium,
+                            color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f))
+                    }
+                    Button(
+                        onClick = { name = ""; error = null; showCreate = true },
+                        colors = ButtonDefaults.buttonColors(
+                            containerColor = MaterialTheme.colorScheme.tertiary,
+                            contentColor = MaterialTheme.colorScheme.onTertiary
+                        )
+                    ) {
+                        Icon(Icons.Default.Add, contentDescription = null)
+                        Spacer(Modifier.size(5.dp))
+                        Text("New")
+                    }
                 }
             }
             if (repositories.isEmpty()) {
@@ -321,15 +337,37 @@ private fun RepositoriesScreen() {
                 LazyColumn(verticalArrangement = Arrangement.spacedBy(10.dp)) {
                     items(repositories.size) { index ->
                         val repo = repositories[index]
-                        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
+                        Card(
+                            Modifier.fillMaxWidth().clickable { selected = repo },
+                            shape = RoundedCornerShape(18.dp),
+                            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                            elevation = CardDefaults.cardElevation(defaultElevation = 2.dp)
+                        ) {
                             Row(
-                                Modifier.fillMaxWidth().clickable { selected = repo }.padding(12.dp),
+                                Modifier.fillMaxWidth().padding(horizontal = 14.dp, vertical = 13.dp),
                                 verticalAlignment = Alignment.CenterVertically
                             ) {
-                                Icon(Icons.Default.Folder, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
-                                Column(Modifier.weight(1f).padding(start = 10.dp)) {
-                                    Text(repo.name, fontWeight = FontWeight.SemiBold)
-                                    Text("Local • Tap to open Git", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                                Box(
+                                    Modifier.size(44.dp).background(
+                                        if (index % 2 == 0) MaterialTheme.colorScheme.primaryContainer
+                                        else MaterialTheme.colorScheme.tertiaryContainer,
+                                        RoundedCornerShape(14.dp)
+                                    ),
+                                    contentAlignment = Alignment.Center
+                                ) {
+                                    Icon(
+                                        Icons.Default.Folder,
+                                        contentDescription = null,
+                                        tint = if (index % 2 == 0) MaterialTheme.colorScheme.primary
+                                        else MaterialTheme.colorScheme.onTertiaryContainer
+                                    )
+                                }
+                                Column(Modifier.weight(1f).padding(start = 12.dp)) {
+                                    Text(repo.name, fontWeight = FontWeight.Bold,
+                                        style = MaterialTheme.typography.titleMedium)
+                                    Text("LOCAL PROJECT  •  Open Git workspace",
+                                        style = MaterialTheme.typography.labelSmall,
+                                        color = MaterialTheme.colorScheme.onSurfaceVariant)
                                 }
                                 androidx.compose.material3.IconButton(onClick = { editing = repo; name = repo.name; error = null }) {
                                     Icon(Icons.Default.Edit, contentDescription = "Rename")
@@ -461,10 +499,28 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
             Spacer(Modifier.weight(1f))
             Text(repository.name, fontWeight = FontWeight.Bold)
         }
-        Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(16.dp)) {
-            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
-                Text("Version Control", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
-                Text("Branch: $branch", color = MaterialTheme.colorScheme.primary)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(22.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primaryContainer)
+        ) {
+            Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(10.dp)) {
+                Text("Git Workspace", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold,
+                    color = MaterialTheme.colorScheme.onPrimaryContainer)
+                Row(verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                    Box(
+                        Modifier.background(MaterialTheme.colorScheme.tertiaryContainer, RoundedCornerShape(50))
+                            .padding(horizontal = 12.dp, vertical = 7.dp)
+                    ) {
+                        Text("BRANCH  $branch", color = MaterialTheme.colorScheme.onTertiaryContainer,
+                            fontWeight = FontWeight.SemiBold, style = MaterialTheme.typography.labelMedium)
+                    }
+                    if (initialized) {
+                        Text("● READY", color = SuccessGreen, style = MaterialTheme.typography.labelSmall,
+                            fontWeight = FontWeight.Bold)
+                    }
+                }
                 if (initialized) {
                     Row(Modifier.fillMaxWidth(), verticalAlignment = Alignment.CenterVertically,
                         horizontalArrangement = Arrangement.SpaceBetween) {
@@ -480,8 +536,16 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                     } else {
                         Column(verticalArrangement = Arrangement.spacedBy(6.dp)) {
                             branches.forEach { name ->
-                                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                                    Row(Modifier.fillMaxWidth().padding(horizontal = 10.dp, vertical = 7.dp),
+                                Card(
+                                    Modifier.fillMaxWidth(),
+                                    shape = RoundedCornerShape(14.dp),
+                                    colors = CardDefaults.cardColors(
+                                        containerColor = if (name == branch)
+                                            MaterialTheme.colorScheme.tertiaryContainer
+                                        else MaterialTheme.colorScheme.surface
+                                    )
+                                ) {
+                                    Row(Modifier.fillMaxWidth().padding(horizontal = 12.dp, vertical = 9.dp),
                                         verticalAlignment = Alignment.CenterVertically) {
                                         Column(Modifier.weight(1f)) {
                                             Text(name, fontWeight = FontWeight.Medium)
@@ -585,9 +649,15 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(history.size) { i ->
                 val c = history[i]
-                Card(Modifier.fillMaxWidth(), shape = RoundedCornerShape(12.dp)) {
-                    Column(Modifier.padding(12.dp), verticalArrangement = Arrangement.spacedBy(4.dp)) {
-                        Text(c.message, fontWeight = FontWeight.SemiBold)
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(16.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface),
+                    elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
+                ) {
+                    Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
+                        Text(c.message, fontWeight = FontWeight.SemiBold,
+                            style = MaterialTheme.typography.titleSmall)
                         Text("${c.shortId} • ${c.author}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
                         TextButton(enabled = !busy, onClick = {
