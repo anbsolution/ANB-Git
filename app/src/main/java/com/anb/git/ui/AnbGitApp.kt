@@ -711,11 +711,12 @@ private fun SettingsScreen() {
                 Text("Package: com.anb.git", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
+        InAppUpdateSection()
         Card(shape = RoundedCornerShape(18.dp)) {
             Column(Modifier.padding(16.dp), verticalArrangement = Arrangement.spacedBy(8.dp)) {
                 Text("About", fontWeight = FontWeight.SemiBold)
-                Text("ANB Git v1.0 – Phase 1 foundation")
-                Text("Designed to operate without internet access.", color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Text("ANB Git v1.0.1")
+                Text("Offline Git tools with optional secure in-app updates.", color = MaterialTheme.colorScheme.onSurfaceVariant)
             }
         }
     }
