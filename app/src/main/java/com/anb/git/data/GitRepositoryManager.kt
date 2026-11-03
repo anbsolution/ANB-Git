@@ -4,6 +4,9 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.Status
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.diff.DiffFormatter
+import org.eclipse.jgit.lib.Constants
+import org.eclipse.jgit.dircache.DirCacheIterator
+import org.eclipse.jgit.treewalk.EmptyTreeIterator
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
@@ -76,7 +79,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
-            val stagedEntries = git.diff().setCached(true).call()
+            val stagedEntries = stagedDiffEntries(git)
             val unstagedEntries = git.diff().call()
             val untracked = git.status().call().untracked.sorted()
             return GitDiffSnapshot(
@@ -84,6 +87,25 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
                 unstaged = formatDiffs(git, unstagedEntries),
                 untracked = untracked
             )
+        }
+    }
+
+    private fun stagedDiffEntries(git: Git): List<DiffEntry> {
+        val repository = git.repository
+        if (repository.resolve(Constants.HEAD) != null) {
+            return git.diff().setCached(true).call()
+        }
+
+        val formatter = DiffFormatter(ByteArrayOutputStream())
+        return try {
+            formatter.setRepository(repository)
+            formatter.setDetectRenames(true)
+            formatter.scan(
+                EmptyTreeIterator(),
+                DirCacheIterator(repository.readDirCache())
+            )
+        } finally {
+            formatter.close()
         }
     }
 
