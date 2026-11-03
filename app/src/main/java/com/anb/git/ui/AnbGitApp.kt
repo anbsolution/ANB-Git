@@ -385,6 +385,12 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     var diffSnapshot by remember { mutableStateOf<com.anb.git.data.GitDiffSnapshot?>(null) }
     var showMergeDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
     var mergeBranchName by remember { androidx.compose.runtime.mutableStateOf("") }
+    var showConflictDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var conflictPaths by remember { androidx.compose.runtime.mutableStateOf(emptyList<String>()) }
+    var selectedConflict by remember { androidx.compose.runtime.mutableStateOf<String?>(null) }
+    var conflictContent by remember { androidx.compose.runtime.mutableStateOf("") }
+    var mergeCommitMessage by remember { androidx.compose.runtime.mutableStateOf("Merge branch") }
+
 
 
     suspend fun reload() {
@@ -558,6 +564,100 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
         }
     }
 
+
+    if (showConflictDialog) {
+        MergeConflictDialog(
+            paths = conflictPaths,
+            selectedPath = selectedConflict,
+            content = conflictContent,
+            mergeMessage = mergeCommitMessage,
+            busy = busy,
+            onSelect = { path ->
+                selectedConflict = path
+                conflictContent = try {
+                    val file = java.io.File(directory, path)
+                    if (file.isFile) file.readText() else ""
+                } catch (_: Exception) { "" }
+            },
+            onContentChange = { conflictContent = it },
+            onKeep = { choice ->
+                val path = selectedConflict ?: return@MergeConflictDialog
+                scope.launch {
+                    busy = true
+                    try {
+                        withContext(Dispatchers.IO) { manager.resolveConflict(path, choice) }
+                        conflictPaths = withContext(Dispatchers.IO) { manager.conflictFiles() }
+                        selectedConflict = conflictPaths.firstOrNull()
+                        conflictContent = selectedConflict?.let { p ->
+                            val f = java.io.File(directory, p)
+                            if (f.isFile) f.readText() else ""
+                        } ?: ""
+                        notice = "Conflict choice applied to $path."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not resolve conflict."
+                    } finally { busy = false }
+                }
+            },
+            onSaveManual = {
+                val path = selectedConflict ?: return@MergeConflictDialog
+                scope.launch {
+                    busy = true
+                    try {
+                        withContext(Dispatchers.IO) {
+                            val target = java.io.File(directory, path).canonicalFile
+                            val root = directory.canonicalFile
+                            require(target.toPath().startsWith(root.toPath())) { "Invalid repository path." }
+                            target.parentFile?.mkdirs()
+                            target.writeText(conflictContent)
+                            manager.stageResolvedFile(path)
+                        }
+                        conflictPaths = withContext(Dispatchers.IO) { manager.conflictFiles() }
+                        selectedConflict = conflictPaths.firstOrNull()
+                        conflictContent = selectedConflict?.let { p ->
+                            val f = java.io.File(directory, p)
+                            if (f.isFile) f.readText() else ""
+                        } ?: ""
+                        notice = "Manual resolution staged."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not stage manual resolution."
+                    } finally { busy = false }
+                }
+            },
+            onMergeMessageChange = { mergeCommitMessage = it },
+            onContinue = {
+                scope.launch {
+                    busy = true
+                    try {
+                        withContext(Dispatchers.IO) { manager.continueMerge(mergeCommitMessage) }
+                        showConflictDialog = false
+                        reload()
+                        notice = "Merge completed and commit created."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not continue merge."
+                    } finally { busy = false }
+                }
+            },
+            onAbort = {
+                scope.launch {
+                    busy = true
+                    try {
+                        withContext(Dispatchers.IO) { manager.abortMerge() }
+                        showConflictDialog = false
+                        reload()
+                        notice = "Merge aborted. Current branch restored."
+                        error = null
+                    } catch (e: Exception) {
+                        error = e.message ?: "Could not abort merge."
+                    } finally { busy = false }
+                }
+            },
+            onDismiss = { if (!busy) showConflictDialog = false }
+        )
+    }
+
     if (showDiffViewer) {
         DiffViewerDialog(snapshot = diffSnapshot, onDismiss = { showDiffViewer = false })
     }
@@ -589,10 +689,17 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         val result = withContext(Dispatchers.IO) { manager.mergeBranch(mergeBranchName) }
                         showMergeDialog = false
                         reload()
-                        notice = if (result.conflicts.isNotEmpty()) {
-                            "Merge ${result.status}. Conflicts: ${result.conflicts.joinToString()}"
+                        if (result.conflicts.isNotEmpty()) {
+                            conflictPaths = withContext(Dispatchers.IO) { manager.conflictFiles() }
+                            selectedConflict = conflictPaths.firstOrNull()
+                            conflictContent = selectedConflict?.let { path ->
+                                val file = java.io.File(directory, path)
+                                if (file.isFile) file.readText() else ""
+                            } ?: ""
+                            showConflictDialog = true
+                            notice = "Merge paused. Resolve ${result.conflicts.size} conflicting file(s)."
                         } else {
-                            "Merge ${result.status.lowercase().replace('_', ' ')}."
+                            notice = "Merge ${result.status.lowercase().replace('_', ' ')}."
                         }
                         error = null
                     } catch (e: Exception) {
@@ -649,6 +756,85 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     )
 }
 
+
+@Composable
+private fun MergeConflictDialog(
+    paths: List<String>,
+    selectedPath: String?,
+    content: String,
+    mergeMessage: String,
+    busy: Boolean,
+    onSelect: (String) -> Unit,
+    onContentChange: (String) -> Unit,
+    onKeep: (String) -> Unit,
+    onSaveManual: () -> Unit,
+    onMergeMessageChange: (String) -> Unit,
+    onContinue: () -> Unit,
+    onAbort: () -> Unit,
+    onDismiss: () -> Unit
+) {
+    AlertDialog(
+        onDismissRequest = onDismiss,
+        title = { Text("Resolve merge conflicts") },
+        text = {
+            Column(
+                Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
+                verticalArrangement = Arrangement.spacedBy(8.dp)
+            ) {
+                Text("Unresolved files: ${paths.size}", fontWeight = FontWeight.SemiBold)
+                if (paths.isEmpty()) {
+                    Text("All conflict entries are resolved. Continue the merge or abort it.")
+                } else {
+                    paths.forEach { path ->
+                        OutlinedButton(
+                            enabled = !busy,
+                            onClick = { onSelect(path) },
+                            modifier = Modifier.fillMaxWidth()
+                        ) { Text(if (path == selectedPath) "● $path" else path) }
+                    }
+                    selectedPath?.let { path ->
+                        Text("Selected: $path", fontWeight = FontWeight.SemiBold)
+                        OutlinedTextField(
+                            value = content,
+                            onValueChange = onContentChange,
+                            modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp, max = 260.dp),
+                            label = { Text("Manual resolution") },
+                            textStyle = TextStyle(fontFamily = FontFamily.Monospace)
+                        )
+                        Text("Choose a side or edit the text and stage your manual resolution.",
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                            OutlinedButton(enabled = !busy, onClick = { onKeep("CURRENT") }) { Text("Keep Current") }
+                            OutlinedButton(enabled = !busy, onClick = { onKeep("INCOMING") }) { Text("Keep Incoming") }
+                        }
+                        Button(enabled = !busy, onClick = onSaveManual, modifier = Modifier.fillMaxWidth()) {
+                            Text("Save & Stage Manual Edit")
+                        }
+                    }
+                }
+                HorizontalDivider()
+                OutlinedTextField(
+                    value = mergeMessage,
+                    onValueChange = onMergeMessageChange,
+                    enabled = !busy,
+                    modifier = Modifier.fillMaxWidth(),
+                    label = { Text("Merge commit message") },
+                    singleLine = true
+                )
+                Button(
+                    enabled = !busy && paths.isEmpty() && mergeMessage.isNotBlank(),
+                    onClick = onContinue,
+                    modifier = Modifier.fillMaxWidth()
+                ) { Text("Continue Merge") }
+                OutlinedButton(enabled = !busy, onClick = onAbort, modifier = Modifier.fillMaxWidth()) {
+                    Text("Abort Merge")
+                }
+            }
+        },
+        confirmButton = { TextButton(enabled = !busy, onClick = onDismiss) { Text("Close") } }
+    )
+}
 
 @Composable
 private fun DiffViewerDialog(

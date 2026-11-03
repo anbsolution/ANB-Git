@@ -86,4 +86,68 @@ class GitRepositoryManagerTest {
             root.deleteRecursively()
         }
     }
+
+    @Test
+    fun resolveConflictChoosesCurrentAndCompletesMerge() {
+        val root = Files.createTempDirectory("anb-git-resolve-current").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            sample.writeText("current version\n")
+            manager.stageAll()
+            manager.commit("Current change")
+            manager.switchBranch("feature")
+            sample.writeText("incoming version\n")
+            manager.stageAll()
+            manager.commit("Incoming change")
+            manager.switchBranch("master")
+            val merge = manager.mergeBranch("feature")
+            assertEquals("CONFLICTING", merge.status)
+            assertTrue(manager.conflictFiles().contains("shared.txt"))
+            manager.resolveConflict("shared.txt", "CURRENT")
+            assertEquals("current version\n", sample.readText())
+            assertTrue(manager.conflictFiles().isEmpty())
+            val commit = manager.continueMerge("Resolve shared file")
+            assertEquals("Resolve shared file", commit.message)
+            assertTrue(manager.status().isClean)
+            assertTrue(manager.history().any { it.message == "Resolve shared file" })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun abortMergeRestoresCurrentBranchAndClearsConflictState() {
+        val root = Files.createTempDirectory("anb-git-abort-merge").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            sample.writeText("current version\n")
+            manager.stageAll()
+            manager.commit("Current change")
+            manager.switchBranch("feature")
+            sample.writeText("incoming version\n")
+            manager.stageAll()
+            manager.commit("Incoming change")
+            manager.switchBranch("master")
+            assertEquals("CONFLICTING", manager.mergeBranch("feature").status)
+            manager.abortMerge()
+            assertEquals("current version\n", sample.readText())
+            assertTrue(manager.conflictFiles().isEmpty())
+            assertTrue(manager.status().isClean)
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
 }

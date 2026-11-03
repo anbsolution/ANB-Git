@@ -183,6 +183,101 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         }
     }
 
+
+    /** Paths whose index contains unresolved stages (1/2/3). */
+    fun conflictFiles(): List<String> {
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val index = git.repository.readDirCache()
+            return (0 until index.entryCount)
+                .map { index.getEntry(it) }
+                .filter { it.stage != 0 }
+                .map { it.pathString }
+                .distinct()
+                .sorted()
+        }
+    }
+
+    /** Resolve a path using stage 2 (current) or stage 3 (incoming). */
+    fun resolveConflict(path: String, choice: String) {
+        require(choice == "CURRENT" || choice == "INCOMING") { "Unknown conflict choice." }
+        val cleanPath = path.trim()
+        require(cleanPath.isNotEmpty() && !cleanPath.startsWith("/") &&
+            cleanPath.split('/').none { it == ".." || it.isEmpty() }) { "Invalid repository path." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            val index = repository.readDirCache()
+            val selectedStage = if (choice == "CURRENT") 2 else 3
+            val entry = (0 until index.entryCount)
+                .map { index.getEntry(it) }
+                .firstOrNull { it.pathString == cleanPath && it.stage == selectedStage }
+            if (entry == null) {
+                val target = File(repositoryDirectory, cleanPath).canonicalFile
+                val root = repositoryDirectory.canonicalFile
+                require(target.toPath().startsWith(root.toPath())) { "Invalid repository path." }
+                if (target.exists()) target.delete()
+                git.rm().addFilepattern(cleanPath).call()
+            } else {
+                val bytes = repository.newObjectReader().use { reader -> reader.open(entry.objectId).bytes }
+                val target = File(repositoryDirectory, cleanPath).canonicalFile
+                val root = repositoryDirectory.canonicalFile
+                require(target.toPath().startsWith(root.toPath())) { "Invalid repository path." }
+                target.parentFile?.mkdirs()
+                target.writeBytes(bytes)
+                git.add().addFilepattern(cleanPath).call()
+            }
+        }
+    }
+
+    /** Stage a manually edited conflict file. */
+    fun stageResolvedFile(path: String) {
+        val cleanPath = path.trim()
+        require(cleanPath.isNotEmpty() && !cleanPath.startsWith("/") &&
+            cleanPath.split('/').none { it == ".." || it.isEmpty() }) { "Invalid repository path." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val target = File(repositoryDirectory, cleanPath).canonicalFile
+            val root = repositoryDirectory.canonicalFile
+            require(target.toPath().startsWith(root.toPath())) { "Invalid repository path." }
+            if (target.exists()) git.add().addFilepattern(cleanPath).call()
+            else git.rm().addFilepattern(cleanPath).call()
+        }
+    }
+
+    /** Complete a merge after all unmerged index entries have been resolved. */
+    fun continueMerge(message: String): GitCommitInfo {
+        val cleanMessage = message.trim()
+        require(cleanMessage.isNotEmpty()) { "Enter a merge commit message." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            check(repository.readMergeHeads()?.isNotEmpty() == true) { "No merge is currently in progress." }
+            val unresolved = conflictFiles()
+            check(unresolved.isEmpty()) { "Resolve all conflicts first: ${unresolved.joinToString()}" }
+            return git.commit()
+                .setMessage(cleanMessage)
+                .setAuthor("ANB Git", "anb-git@local.invalid")
+                .setCommitter("ANB Git", "anb-git@local.invalid")
+                .setAllowEmpty(false)
+                .call()
+                .toInfo()
+        }
+    }
+
+    /** Abort an in-progress merge and restore the current branch HEAD. */
+    fun abortMerge() {
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            check(repository.readMergeHeads()?.isNotEmpty() == true) { "No merge is currently in progress." }
+            git.reset().setMode(org.eclipse.jgit.api.ResetCommand.ResetType.HARD)
+                .setRef(Constants.HEAD).call()
+            repository.writeMergeHeads(null)
+            repository.writeMergeCommitMsg(null)
+        }
+    }
+
     fun listBranches(): List<String> {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
