@@ -500,7 +500,7 @@ private fun GitRepositoryScreen(
                                 reload()
                                 notice = "Commit created."
                                 error = null
-                            } catch (e: Exception) { error = e.message ?: "Commit failed." }
+                            } catch (e: Exception) { error = "${e.javaClass.simpleName}: ${e.message ?: "No detail"}" }
                         }) { Text("Commit") }
                     }
                     OutlinedButton(onClick = { reload(); error = null }) { Text("Refresh status") }
