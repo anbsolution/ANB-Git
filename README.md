@@ -127,3 +127,12 @@ repository data has been exported and verified. The project must add and test
 an in-app export/restore path before any one-time signature migration is
 attempted. If the original signing certificate/private key is recovered and
 matches, this migration is not needed.
+
+
+### Signing configuration fix
+
+Debug unit tests no longer require release-signing secrets. The release signing
+configuration is activated only when all four signing environment variables
+are present, and `assembleRelease` explicitly fails if they are missing. This
+allows `testDebugUnitTest` to run before the keystore restore step while
+preventing an accidental unsigned release artifact.

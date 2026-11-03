@@ -17,23 +17,31 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    val releaseKeystorePath = System.getenv("ANB_KEYSTORE_PATH")
+    val releaseStorePassword = System.getenv("ANB_KEYSTORE_PASSWORD")
+    val releaseKeyAlias = System.getenv("ANB_KEY_ALIAS")
+    val releaseKeyPassword = System.getenv("ANB_KEY_PASSWORD")
+    val releaseSigningReady = !releaseKeystorePath.isNullOrBlank() &&
+        !releaseStorePassword.isNullOrBlank() &&
+        !releaseKeyAlias.isNullOrBlank() &&
+        !releaseKeyPassword.isNullOrBlank()
+
     signingConfigs {
-        create("release") {
-            val keystorePath = System.getenv("ANB_KEYSTORE_PATH")
-                ?: error("ANB_KEYSTORE_PATH is required for a signed release build.")
-            storeFile = file(keystorePath)
-            storePassword = System.getenv("ANB_KEYSTORE_PASSWORD")
-                ?: error("ANB_KEYSTORE_PASSWORD secret is missing.")
-            keyAlias = System.getenv("ANB_KEY_ALIAS")
-                ?: error("ANB_KEY_ALIAS secret is missing.")
-            keyPassword = System.getenv("ANB_KEY_PASSWORD")
-                ?: error("ANB_KEY_PASSWORD secret is missing.")
+        if (releaseSigningReady) {
+            create("release") {
+                storeFile = file(releaseKeystorePath!!)
+                storePassword = releaseStorePassword!!
+                keyAlias = releaseKeyAlias!!
+                keyPassword = releaseKeyPassword!!
+            }
         }
     }
 
     buildTypes {
         release {
-            signingConfig = signingConfigs.getByName("release")
+            if (releaseSigningReady) {
+                signingConfig = signingConfigs.getByName("release")
+            }
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -78,4 +86,15 @@ dependencies {
     androidTestImplementation("androidx.compose.ui:ui-test-junit4")
     debugImplementation("androidx.compose.ui:ui-tooling")
     debugImplementation("androidx.compose.ui:ui-test-manifest")
+}
+
+
+tasks.configureEach {
+    if (name == "assembleRelease") {
+        doFirst {
+            check(releaseSigningReady) {
+                "Release signing secrets are missing. Configure ANB_KEYSTORE_PATH, ANB_KEYSTORE_PASSWORD, ANB_KEY_ALIAS and ANB_KEY_PASSWORD."
+            }
+        }
+    }
 }
