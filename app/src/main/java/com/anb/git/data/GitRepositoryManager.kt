@@ -45,6 +45,12 @@ data class GitDiffSnapshot(
     val untracked: List<String>
 )
 
+data class GitMergeResult(
+    val status: String,
+    val conflicts: List<String>,
+    val newHead: String?
+)
+
 /** Local-only Git operations backed by JGit. */
 class GitRepositoryManager(private val repositoryDirectory: File) {
     init {
@@ -141,6 +147,39 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
             }
         } finally {
             formatter.close()
+        }
+    }
+
+
+    /**
+     * Merge a local branch into the current branch.
+     * Requires a clean worktree. Conflicts are reported and left for Phase 5.4.
+     */
+    fun mergeBranch(name: String): GitMergeResult {
+        val cleanName = name.trim()
+        require(cleanName.isNotEmpty()) { "Select a branch to merge." }
+        ensureInitialized()
+        Git.open(repositoryDirectory).use { git ->
+            val repository = git.repository
+            val current = repository.branch ?: "HEAD"
+            require(cleanName != current) { "Cannot merge the current branch into itself." }
+            check(git.status().call().isClean) {
+                "Commit or discard working-tree changes before merging."
+            }
+            val target = repository.findRef("refs/heads/$cleanName")
+                ?: throw IllegalArgumentException("Branch does not exist.")
+            repository.config.setString("user", null, "name", "ANB Git")
+            repository.config.setString("user", null, "email", "anb-git@local.invalid")
+            repository.config.save()
+            val result = git.merge()
+                .include(target)
+                .setCommit(true)
+                .call()
+            return GitMergeResult(
+                status = result.mergeStatus.name,
+                conflicts = result.conflicts?.keys?.sorted().orEmpty(),
+                newHead = result.newHead?.name
+            )
         }
     }
 

@@ -1,5 +1,6 @@
 package com.anb.git.data
 
+import org.junit.Assert.assertEquals
 import org.junit.Assert.assertTrue
 import org.junit.Test
 import java.io.File
@@ -20,21 +21,67 @@ class GitRepositoryManagerTest {
             assertTrue(initialDiff.unstaged.isEmpty())
             assertTrue(initialDiff.untracked.isEmpty())
             manager.commit("Initial test commit")
-
             sample.writeText("first line\nsecond line\n")
             val unstaged = manager.diffSnapshot()
-            assertTrue(unstaged.unstaged.any {
-                it.path == "sample.txt" && it.patch.contains("+second line")
-            })
+            assertTrue(unstaged.unstaged.any { it.path == "sample.txt" && it.patch.contains("+second line") })
             assertTrue(unstaged.staged.isEmpty())
-
             manager.stageAll()
             val staged = manager.diffSnapshot()
-            assertTrue(staged.staged.any {
-                it.path == "sample.txt" && it.patch.contains("+second line")
-            })
+            assertTrue(staged.staged.any { it.path == "sample.txt" && it.patch.contains("+second line") })
             assertTrue(staged.unstaged.isEmpty())
             assertTrue(staged.untracked.isEmpty())
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun mergeBranchFastForwardsAndIncludesFeatureFile() {
+        val root = Files.createTempDirectory("anb-git-merge-ff").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            File(root, "base.txt").writeText("base\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            manager.switchBranch("feature")
+            File(root, "feature.txt").writeText("feature work\n")
+            manager.stageAll()
+            manager.commit("Feature commit")
+            manager.switchBranch("master")
+            val result = manager.mergeBranch("feature")
+            assertTrue(result.status == "FAST_FORWARD" || result.status == "MERGED")
+            assertTrue(result.conflicts.isEmpty())
+            assertTrue(File(root, "feature.txt").readText().contains("feature work"))
+            assertTrue(manager.history().any { it.message == "Feature commit" })
+        } finally {
+            root.deleteRecursively()
+        }
+    }
+
+    @Test
+    fun mergeBranchReportsConflictingFile() {
+        val root = Files.createTempDirectory("anb-git-merge-conflict").toFile()
+        try {
+            val manager = GitRepositoryManager(root)
+            manager.initialize()
+            val sample = File(root, "shared.txt")
+            sample.writeText("base line\n")
+            manager.stageAll()
+            manager.commit("Base commit")
+            manager.createBranch("feature")
+            sample.writeText("master version\n")
+            manager.stageAll()
+            manager.commit("Master change")
+            manager.switchBranch("feature")
+            sample.writeText("feature version\n")
+            manager.stageAll()
+            manager.commit("Feature change")
+            manager.switchBranch("master")
+            val result = manager.mergeBranch("feature")
+            assertEquals("CONFLICTING", result.status)
+            assertTrue(result.conflicts.contains("shared.txt"))
         } finally {
             root.deleteRecursively()
         }

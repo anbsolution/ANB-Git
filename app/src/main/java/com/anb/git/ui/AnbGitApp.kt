@@ -383,6 +383,9 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     var busy by remember { androidx.compose.runtime.mutableStateOf(false) }
     var showDiffViewer by remember { androidx.compose.runtime.mutableStateOf(false) }
     var diffSnapshot by remember { mutableStateOf<com.anb.git.data.GitDiffSnapshot?>(null) }
+    var showMergeDialog by remember { androidx.compose.runtime.mutableStateOf(false) }
+    var mergeBranchName by remember { androidx.compose.runtime.mutableStateOf("") }
+
 
     suspend fun reload() {
         try {
@@ -512,6 +515,13 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                             }
                         }) { Text(if (busy) "Working…" else "Commit") }
                     }
+                    OutlinedButton(
+                        enabled = !busy && branches.any { it != branch },
+                        onClick = {
+                            mergeBranchName = branches.firstOrNull { it != branch }.orEmpty()
+                            showMergeDialog = true
+                        }
+                    ) { Text("Merge branch") }
                     OutlinedButton(enabled = !busy, onClick = {
                         scope.launch {
                             busy = true
@@ -551,6 +561,51 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     if (showDiffViewer) {
         DiffViewerDialog(snapshot = diffSnapshot, onDismiss = { showDiffViewer = false })
     }
+
+    if (showMergeDialog) AlertDialog(
+        onDismissRequest = { if (!busy) showMergeDialog = false },
+        title = { Text("Merge local branch") },
+        text = {
+            Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
+                Text("Merge the selected branch into $branch. The working tree must be clean.")
+                OutlinedTextField(
+                    value = mergeBranchName,
+                    onValueChange = { mergeBranchName = it },
+                    label = { Text("Branch to merge") },
+                    singleLine = true
+                )
+                Text(
+                    "Conflicting files will be reported. Conflict resolution is planned for Phase 5.4.",
+                    style = MaterialTheme.typography.bodySmall,
+                    color = MaterialTheme.colorScheme.onSurfaceVariant
+                )
+            }
+        },
+        confirmButton = {
+            TextButton(enabled = !busy && mergeBranchName.isNotBlank(), onClick = {
+                scope.launch {
+                    busy = true
+                    try {
+                        val result = withContext(Dispatchers.IO) { manager.mergeBranch(mergeBranchName) }
+                        showMergeDialog = false
+                        reload()
+                        notice = if (result.conflicts.isNotEmpty()) {
+                            "Merge ${result.status}. Conflicts: ${result.conflicts.joinToString()}"
+                        } else {
+                            "Merge ${result.status.lowercase().replace('_', ' ')}."
+                        }
+                        error = null
+                    } catch (e: Exception) {
+                        error = "${e.javaClass.simpleName}: ${e.message ?: "Merge failed."}"
+                    } finally { busy = false }
+                }
+            }) { Text(if (busy) "Merging…" else "Merge") }
+        },
+        dismissButton = {
+            TextButton(enabled = !busy, onClick = { showMergeDialog = false }) { Text("Cancel") }
+        }
+    )
+
 
     if (showCreateBranch) AlertDialog(
         onDismissRequest = { showCreateBranch = false },
