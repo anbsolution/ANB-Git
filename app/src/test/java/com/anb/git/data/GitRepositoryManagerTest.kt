@@ -17,6 +17,8 @@ class GitRepositoryManagerTest {
             manager.stageAll()
             val initialDiff = manager.diffSnapshot()
             assertTrue(initialDiff.staged.any { it.path == "sample.txt" && it.changeType == "ADD" })
+            assertTrue(initialDiff.unstaged.isEmpty())
+            assertTrue(initialDiff.untracked.isEmpty())
             manager.commit("Initial test commit")
 
             sample.writeText("first line\nsecond line\n")

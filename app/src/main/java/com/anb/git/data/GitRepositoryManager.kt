@@ -4,8 +4,6 @@ import org.eclipse.jgit.api.Git
 import org.eclipse.jgit.api.Status
 import org.eclipse.jgit.diff.DiffEntry
 import org.eclipse.jgit.diff.DiffFormatter
-import org.eclipse.jgit.treewalk.EmptyTreeIterator
-import org.eclipse.jgit.dircache.DirCacheIterator
 import org.eclipse.jgit.revwalk.RevCommit
 import org.eclipse.jgit.lib.Repository
 import java.io.ByteArrayOutputStream
@@ -78,14 +76,7 @@ class GitRepositoryManager(private val repositoryDirectory: File) {
         ensureInitialized()
         Git.open(repositoryDirectory).use { git ->
             val repository = git.repository
-            val stagedEntries = if (repository.resolve("HEAD") == null) {
-                git.diff()
-                    .setOldTree(EmptyTreeIterator())
-                    .setNewTree(DirCacheIterator(repository.readDirCache()))
-                    .call()
-            } else {
-                git.diff().setCached(true).call()
-            }
+            val stagedEntries = git.diff().setCached(true).call()
             val unstagedEntries = git.diff().call()
             val untracked = git.status().call().untracked.sorted()
             return GitDiffSnapshot(
