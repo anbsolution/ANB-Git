@@ -539,8 +539,6 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
             TextButton(onClick = onBack) {
-                Icon(Icons.Default.ArrowBack, contentDescription = null)
-                Spacer(Modifier.size(4.dp))
                 Text("Repositories")
             }
             Spacer(Modifier.weight(1f))
@@ -629,9 +627,6 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                 ) {
                     Row(Modifier.fillMaxWidth().padding(12.dp),
                         verticalAlignment = Alignment.CenterVertically) {
-                        Icon(Icons.Default.Info, contentDescription = null,
-                            tint = MaterialTheme.colorScheme.primary)
-                        Spacer(Modifier.size(9.dp))
                         Column(Modifier.weight(1f)) {
                             Text("REPOSITORY STATUS", style = MaterialTheme.typography.labelSmall,
                                 fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)

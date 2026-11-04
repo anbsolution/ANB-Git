@@ -12,8 +12,8 @@ android {
         applicationId = "com.anb.git"
         minSdk = 26
         targetSdk = 35
-        versionCode = 26
-        versionName = "1.2.4"
+        versionCode = 27
+        versionName = "1.2.5"
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
