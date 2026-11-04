@@ -538,7 +538,11 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
 
     Column(Modifier.fillMaxSize().padding(16.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Row(verticalAlignment = Alignment.CenterVertically) {
-            TextButton(onClick = onBack) { Text("‹ Repositories") }
+            TextButton(onClick = onBack) {
+                Icon(Icons.Default.ArrowBack, contentDescription = null)
+                Spacer(Modifier.size(4.dp))
+                Text("Repositories")
+            }
             Spacer(Modifier.weight(1f))
             Text(repository.name, fontWeight = FontWeight.Bold)
         }
@@ -618,7 +622,24 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                         }
                     }
                 }
-                Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                Card(
+                    Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(14.dp),
+                    colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.surface)
+                ) {
+                    Row(Modifier.fillMaxWidth().padding(12.dp),
+                        verticalAlignment = Alignment.CenterVertically) {
+                        Icon(Icons.Default.Info, contentDescription = null,
+                            tint = MaterialTheme.colorScheme.primary)
+                        Spacer(Modifier.size(9.dp))
+                        Column(Modifier.weight(1f)) {
+                            Text("REPOSITORY STATUS", style = MaterialTheme.typography.labelSmall,
+                                fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary)
+                            Text(statusText, color = MaterialTheme.colorScheme.onSurfaceVariant,
+                                style = MaterialTheme.typography.bodySmall)
+                        }
+                    }
+                }
                 if (!initialized) {
                     Button(enabled = !busy, onClick = {
                         scope.launch {
@@ -687,7 +708,28 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                 error?.let { Text(it, color = MaterialTheme.colorScheme.error) }
             }
         }
-        Text("Commit history", style = MaterialTheme.typography.titleLarge, fontWeight = FontWeight.Bold)
+        Card(
+            Modifier.fillMaxWidth(),
+            shape = RoundedCornerShape(16.dp),
+            colors = CardDefaults.cardColors(containerColor = MaterialTheme.colorScheme.primary)
+        ) {
+            Row(Modifier.fillMaxWidth().padding(horizontal = 15.dp, vertical = 12.dp),
+                verticalAlignment = Alignment.CenterVertically,
+                horizontalArrangement = Arrangement.SpaceBetween) {
+                Column(verticalArrangement = Arrangement.spacedBy(2.dp)) {
+                    Text("COMMIT TIMELINE", style = MaterialTheme.typography.labelSmall,
+                        color = MaterialTheme.colorScheme.onPrimary.copy(alpha = 0.82f),
+                        fontWeight = FontWeight.Bold)
+                    Text("Commit history", style = MaterialTheme.typography.titleLarge,
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.onPrimary)
+                }
+                Box(Modifier.background(MaterialTheme.colorScheme.tertiary, RoundedCornerShape(50))
+                    .padding(horizontal = 11.dp, vertical = 6.dp)) {
+                    Text("${history.size} shown", color = MaterialTheme.colorScheme.onTertiary,
+                        style = MaterialTheme.typography.labelMedium, fontWeight = FontWeight.Bold)
+                }
+            }
+        }
         if (history.isEmpty()) Text("No commits yet.", color = MaterialTheme.colorScheme.onSurfaceVariant)
         else LazyColumn(verticalArrangement = Arrangement.spacedBy(8.dp)) {
             items(history.size) { i ->
@@ -699,7 +741,7 @@ private fun GitRepositoryScreen(repository: LocalRepository, onBack: () -> Unit)
                     elevation = CardDefaults.cardElevation(defaultElevation = 1.dp)
                 ) {
                     Column(Modifier.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
-                        Text(c.message, fontWeight = FontWeight.SemiBold,
+                        Text(c.message, fontWeight = FontWeight.Bold,
                             style = MaterialTheme.typography.titleSmall)
                         Text("${c.shortId} • ${c.author}", style = MaterialTheme.typography.bodySmall,
                             color = MaterialTheme.colorScheme.onSurfaceVariant)
@@ -971,7 +1013,14 @@ private fun MergeConflictDialog(
 ) {
     AlertDialog(
         onDismissRequest = onDismiss,
-        title = { Text("Resolve merge conflicts") },
+        title = {
+            Column(verticalArrangement = Arrangement.spacedBy(3.dp)) {
+                Text("Resolve conflicts", fontWeight = FontWeight.Bold)
+                Text("MERGE • CHERRY-PICK • REVERT",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary)
+            }
+        },
         text = {
             Column(
                 Modifier.heightIn(max = 560.dp).verticalScroll(rememberScrollState()),
@@ -1048,7 +1097,9 @@ private fun DiffViewerDialog(
                 if (snapshot == null) {
                     Text("No diff data available.")
                 } else {
-                    Text("Staged changes (${snapshot.staged.size})", fontWeight = FontWeight.Bold)
+                    Text("STAGED CHANGES  •  ${snapshot.staged.size}",
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.titleSmall)
                     if (snapshot.staged.isEmpty()) {
                         Text("No staged changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else snapshot.staged.forEach { file ->
@@ -1057,7 +1108,9 @@ private fun DiffViewerDialog(
                             style = MaterialTheme.typography.bodySmall)
                     }
                     HorizontalDivider()
-                    Text("Unstaged changes (${snapshot.unstaged.size})", fontWeight = FontWeight.Bold)
+                    Text("UNSTAGED CHANGES  •  ${snapshot.unstaged.size}",
+                        fontWeight = FontWeight.Bold, color = MaterialTheme.colorScheme.primary,
+                        style = MaterialTheme.typography.titleSmall)
                     if (snapshot.unstaged.isEmpty()) {
                         Text("No unstaged changes.", color = MaterialTheme.colorScheme.onSurfaceVariant)
                     } else snapshot.unstaged.forEach { file ->
